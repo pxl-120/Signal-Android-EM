@@ -436,8 +436,11 @@ android {
     create("website") {
       dimension = "distribution"
       applicationIdSuffix = ".mod"
-      buildConfigField("boolean", "MANAGES_APP_UPDATES", "false")
-      buildConfigField("String", "APK_UPDATE_MANIFEST_URL", "null")
+      // Signal+ self-updater: re-enabled, pointed at our own GitHub Releases manifest
+      // (upstream default was true + updates.signal.org, which we can't self-update from).
+      // The manifest at this URL is generated + published by tools/publish-update.sh.
+      buildConfigField("boolean", "MANAGES_APP_UPDATES", "true")
+      buildConfigField("String", "APK_UPDATE_MANIFEST_URL", "\"https://github.com/pxl-120/Signal-Android-EM/releases/latest/download/update.json\"")
       buildConfigField("String", "BUILD_DISTRIBUTION_TYPE", "\"website\"")
     }
 
