@@ -29,8 +29,9 @@ import java.util.Set;
 
 /**
  * Holds the custom-emoji name maps, loaded from the imported pack at
- * {@code filesDir/custom_emoji/current/custom_emoji.json} (see {@link CustomEmojiPackManager}). There
- * is no bundled/default pack: until the user imports one, the registry is empty.
+ * {@code filesDir/custom_emoji/current/emoji.json} (see {@link CustomEmojiPackManager}). Bundled media
+ * files live in the pack's {@code media/} subdirectory. There is no bundled/default pack: until the
+ * user imports one, the registry is empty.
  *
  * <p>Each emoji has:
  * <ul>
@@ -55,7 +56,8 @@ import java.util.Set;
 public final class CustomEmojiRegistry {
 
   private static final String TAG                  = "CustomEmojiRegistry";
-  private static final String CONFIG_RELATIVE_PATH = "custom_emoji/current/custom_emoji.json";
+  private static final String CONFIG_RELATIVE_PATH = "custom_emoji/current/emoji.json";
+  private static final String MEDIA_DIR            = "media";
 
   private static final Object LOCK = new Object();
 
@@ -309,10 +311,32 @@ public final class CustomEmojiRegistry {
     }
 
     if (baseDir != null) {
-      return "file://" + new File(baseDir, value).getAbsolutePath();
+      return "file://" + resolveMediaFile(baseDir, value).getAbsolutePath();
     }
 
     return null;
+  }
+
+  /**
+   * Resolves a pack-relative media reference (a {@code file} entry, or a local {@code source}) to a
+   * {@link File}. Media conventionally lives in the pack's {@code media/} subdirectory, so a relative
+   * name is looked up there first (canonical layout: a bare {@code "pepega.webp"} maps to
+   * {@code media/pepega.webp}); if it isn't found under {@code media/}, it falls back to a path relative
+   * to the config itself, which keeps an explicit {@code "media/…"} path, any other subdirectory, and the
+   * legacy flat layout working. An absolute path is used verbatim. Shared with
+   * {@link CustomEmojiPackManager} so import-time validation and load-time resolution agree.
+   */
+  static @NonNull File resolveMediaFile(@NonNull File baseDir, @NonNull String relativeName) {
+    if (relativeName.startsWith("/")) {
+      return new File(relativeName);
+    }
+
+    File inMedia = new File(new File(baseDir, MEDIA_DIR), relativeName);
+    if (inMedia.isFile()) {
+      return inMedia;
+    }
+
+    return new File(baseDir, relativeName);
   }
 
   private static @NonNull String normalizeForSearch(@NonNull String value) {

@@ -26,7 +26,7 @@ public final class CustomEmojiPackManager {
   private static final String ROOT_DIR = "custom_emoji";
   private static final String CURRENT_DIR = "current";
   private static final String TMP_DIR = "import_tmp";
-  private static final String CONFIG_NAME = "custom_emoji.json";
+  private static final String CONFIG_NAME = "emoji.json";
 
   private CustomEmojiPackManager() {}
 
@@ -183,7 +183,7 @@ public final class CustomEmojiPackManager {
       }
 
       if (effectiveFile != null) {
-        File media = new File(baseDir, effectiveFile);
+        File media = CustomEmojiRegistry.resolveMediaFile(baseDir, effectiveFile);
         if (!media.isFile()) {
           throw new IllegalArgumentException("Missing media file for " + token + ": " + effectiveFile);
         }

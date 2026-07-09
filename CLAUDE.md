@@ -46,7 +46,7 @@ signed-APK output dir:
 | Path | Contents |
 | --- | --- |
 | `build-and-sign.sh` | Build + zipalign + sign the website-flavor release APKs with your key. |
-| `gen-custom-emoji-json.sh` | Generate a `custom_emoji.json` from a set of media files. |
+| `gen-custom-emoji-json.sh` | Generate an `emoji.json` (+ `media/`) from a set of media files. |
 | `7tv-download-set.sh` | Download a 7TV emote set into a pack layout. |
 | `release/` | Signed-APK output — contents are **git-ignored** (`release/.gitignore`); the dir itself is kept. |
 
@@ -123,8 +123,8 @@ fallback. `loadBytes` resolves `http(s)://` (download), `file://`, and absolute 
 
 | File | Role |
 | --- | --- |
-| `CustomEmojiRegistry.java` | Loads the token→source map from the **imported pack only** (`filesDir/custom_emoji/current/custom_emoji.json`); empty until a pack is imported. Stores names **bare** (no colons) internally and exposes them **colon-wrapped** (`wrap`/`unwrap` at the boundary). Exposes `isCustomToken`, `getSource`, `getTokens`, `getAliases`/`getAliasToken`, `searchTokens` (shared query normalization + matching), `reload`. Thread-safe, lazily loaded. |
-| `CustomEmojiPackManager.java` | `importZip(Context, Uri)` — extracts a ZIP to a temp dir (with path-traversal guards), validates `custom_emoji.json`, atomically rotates it into `current/`, then clears the media cache and reloads the registry. |
+| `CustomEmojiRegistry.java` | Loads the token→source map from the **imported pack only** (`filesDir/custom_emoji/current/emoji.json`, media under `current/media/`); empty until a pack is imported. Stores names **bare** (no colons) internally and exposes them **colon-wrapped** (`wrap`/`unwrap` at the boundary). Exposes `isCustomToken`, `getSource`, `getTokens`, `getAliases`/`getAliasToken`, `searchTokens` (shared query normalization + matching), `reload`. Thread-safe, lazily loaded. |
+| `CustomEmojiPackManager.java` | `importZip(Context, Uri)` — extracts a ZIP to a temp dir (with path-traversal guards), validates `emoji.json` (media resolved under `media/`), atomically rotates it into `current/`, then clears the media cache and reloads the registry. |
 | `CustomEmojiPageModel.java` | An `EmojiPageModel` with key `"Custom"` that backs the dedicated picker tab and the reaction-picker custom block. |
 | `CustomEmojiImageBinder.java` | Binds a custom token into an `ImageView` cell (picker / reaction grid) asynchronously, using the view's content-description/tag as the stable async identity guard. |
 | `CustomEmojiAliasResolver.java` | Swaps a hand-typed completed `:alias:` → its `:token:` in the compose field (picker/autocomplete already insert the token directly). |
@@ -211,8 +211,8 @@ and always returns the canonical token)
 
 ## Custom emoji pack format
 
-`custom_emoji.json` is either `{ "emotes": [ … ] }` or a bare array. Each entry needs a `token` and a
-source (precedence `source` → `url` → `file`), plus an optional `aliases` array. **The `token` and each
+`emoji.json` (at the ZIP root) is either `{ "emotes": [ … ] }` or a bare array. Each entry needs a
+`token` and a source (precedence `source` → `url` → `file`), plus an optional `aliases` array. **The `token` and each
 alias are the bare emoji name, without colons** (e.g. `"pepega"`). The name is the emoji's identity; the
 colon-wrapped `:pepega:` form is what gets inserted, sent, matched in message text, and rendered.
 
@@ -235,16 +235,30 @@ literally contains colons.
 ```
 
 - **`url`** → remote media (fetched and cached on first render; gated by the privacy toggle).
-- **`file`** → media file inside the imported ZIP, resolved to a `file://` path next to the config.
+- **`file`** → media file inside the imported ZIP's **`media/`** directory, given as a bare filename
+  (`"catjam.png"` → `media/catjam.png`) and resolved to a `file://` path. An explicit `"media/…"` path,
+  another subdirectory, or the legacy flat layout also resolve — a relative `file` is looked up under
+  `media/` first, then next to the config (`CustomEmojiRegistry.resolveMediaFile`, shared with the
+  importer so validation and load-time resolution agree).
 - **`aliases`** (optional) → alternative names for **search / type-in only**; never rendered or sent.
   Every token and alias must be **globally unique** across the pack (importer rejects duplicates; loader
   skips them). Resolved to the token before anything is sent, so changing/removing an alias never affects
   already-sent messages.
 
-**Location:** the imported pack is the only source — `filesDir/custom_emoji/current/custom_emoji.json`
-plus media next to it. The ZIP is supplied either by picking a local file or by URL download
-(`CustomEmojiPackUpdater`); in it, `custom_emoji.json` must be at the **root** and `file` media may live
-in subdirs. (There is no bundled/default pack — see *Known deviations*.)
+**Location:** the imported pack is the only source — `filesDir/custom_emoji/current/emoji.json` plus its
+`media/` directory. The ZIP is supplied either by picking a local file or by URL download
+(`CustomEmojiPackUpdater`); in it, `emoji.json` must be at the **root** and bundled media lives under
+**`media/`**:
+
+```
+pack.zip
+├── emoji.json
+└── media/
+    ├── catjam.png
+    └── …
+```
+
+(There is no bundled/default pack — see *Known deviations*.)
 
 ## Conventions / gotchas when modifying this code
 
