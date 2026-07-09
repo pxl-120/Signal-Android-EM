@@ -29,28 +29,26 @@ Signal:
 The fork is branded **"Signal+"** and installs side-by-side with official Signal (see *Build &
 branding* below).
 
-### Source of truth for the modifications: `signal-dev/`
+### Source of truth for the modifications: git history + `tools/`
 
-The **`signal-dev/`** directory is this fork's design log, changelog, and reproduction archive (not
-shipped, not built). It documents the modifications stage by stage. **`signal-dev/README.md` explains
-the dir and its frozen-vs-editable strategy** — read it before adding to the docs. The authoritative,
-exact record is `stage1-and2-full.md`; the older `.txt` notes are approximate (trust the actual code
-and `stage1-and2-full.md` over them when they disagree — see *Known deviations*). Contents:
+This fork tracks upstream through **git**, so the **commit history is the authoritative changelog** —
+every modification is a real commit rather than a hand-written design log. Branch model:
 
-| Path | Editable? | Contents |
-| --- | --- | --- |
-| `README.md` | yes | Describes the directory + the staged documentation strategy. |
-| `stage1-and2-full.md` | frozen | ⭐ **Authoritative**: complete, exact before→after for every modification in stage 1 + 2 + 2-extra. Reproduction-grade. |
-| `stage3.md` | yes (live) | Stage-3 cleanup/refactor changelog (current chapter). Documents original-file changes only; new-file source is the live repo. |
-| `stage2-new-files/` | frozen | Verbatim source of the 9 new files at end of stage 2 (the docs don't inline new-file code). **Stale after stage 3** — see live repo. |
-| `stage1-full.txt` | frozen | Original stage-1 notes: source of the first 8 new files + first edits. |
-| `stage2-part1.txt` | frozen | Original stage-2 notes (prose): full file set + edit descriptions. |
-| `stage2-part2.txt` | frozen | Original stage-2 build/release notes (APK build, signing, packaging). |
-| `stage2-extra.txt` | frozen | Original stage-2 extension (code): custom-emoji reactions + search. |
-| `stage3-epilog.txt` | frozen | Archived prompt that requested this `CLAUDE.md` + the archival work. |
+- **`main`** — a pristine, unmodified mirror of `signalapp/Signal-Android` `main`. Only ever
+  fast-forwarded to upstream; never carries fork changes.
+- **`dev`** — the shipping branch: `main` + the Signal+ modifications. Upstream is pulled in
+  periodically by **merging `main` into `dev`** (never rebase — `dev` is long-lived), so the mods
+  stay layered on top of official code as it advances.
 
-Stage 3 (code cleanup/refactor) is **in progress**; its live doc is `signal-dev/stage3.md`. This
-`CLAUDE.md` stays editable and is updated as the fork evolves.
+The **`tools/`** directory (not shipped, not built) holds the fork's build/helper scripts and the
+signed-APK output dir:
+
+| Path | Contents |
+| --- | --- |
+| `build-and-sign.sh` | Build + zipalign + sign the website-flavor release APKs with your key. |
+| `gen-custom-emoji-json.sh` | Generate a `custom_emoji.json` from a set of media files. |
+| `7tv-download-set.sh` | Download a 7TV emote set into a pack layout. |
+| `release/` | Signed-APK output — contents are **git-ignored** (`release/.gitignore`); the dir itself is kept. |
 
 ## Build & branding
 
@@ -72,11 +70,11 @@ Consequences:
   **alongside** official Signal rather than refusing to install over it (different signing key).
 - **The in-app self-updater is disabled** (`MANAGES_APP_UPDATES = false`, manifest URL `null`) so the
   fork won't try to pull and install official Signal release APKs over itself.
-- Branding lives in **`app/src/website/res/`** (website-flavor resource overlay, not in the notes):
+- Branding lives in **`app/src/website/res/`** (website-flavor resource overlay):
   - `values/strings.xml` → `app_name = "Signal+"`
   - `mipmap-*/ic_launcher.png` → custom launcher icon at all densities.
 
-Build a sideloadable universal APK from the modified repo (per `stage2-part2.txt`):
+Build a sideloadable universal APK from the modified repo (or just run `tools/build-and-sign.sh`):
 
 ```bash
 ./gradlew assembleWebsiteProdRelease         # output: app/build/outputs/apk/websiteProdRelease/
@@ -165,7 +163,7 @@ fallback. `loadBytes` resolves `http(s)://` (download), `file://`, and absolute 
 - `keyboard/emoji/EmojiKeyboardPageCategoriesAdapter.kt` — registers the `CustomMappingModel` view-holder factory.
 - `keyboard/emoji/EmojiPageModelExtensions.kt` — forces custom items to image cells (`EmojiModel`), not text cells.
 
-**Reactions** (see `stage2-extra.txt`)
+**Reactions**
 - `reactions/any/ReactWithAnyEmojiRepository.java` — inserts a custom block right after the first
   standard reaction page.
 - `reactions/any/ReactWithAnyEmojiViewModel.java` — emits `CustomMappingModel` for the custom tab.
@@ -276,7 +274,7 @@ in subdirs. (There is no bundled/default pack — see *Known deviations*.)
   (`ReplacementCharDrawable`); a bare `:url:` stays plain text; the compose field keeps the literal
   `:token:`. Local-file `:token:`s always render.
 
-## Known deviations from `signal-dev/` notes & caveats
+## Known deviations & caveats
 
 - **The bundled asset pack is deprecated and to be removed.** The `assets/custom_emoji/` fallback in
   `CustomEmojiRegistry` was an early bootstrap/testing convenience from when the system was first built;
@@ -284,8 +282,8 @@ in subdirs. (There is no bundled/default pack — see *Known deviations*.)
   present** in the repo, and this whole asset-loading code path is **slated for removal** — don't build
   on it or try to "restore" a default pack. With no imported pack, `getTokens` returns empty and there
   are simply zero custom emoji until a ZIP is imported (inline image URLs still work regardless).
-- **`build.gradle.kts` and `app/src/website/res/` changes are not in the notes** — they're documented
-  here for the first time.
+- **`build.gradle.kts` and `app/src/website/res/`** — the website-flavor build changes (`.mod` suffix,
+  updater off) and the branding overlay; see *Build & branding* above.
 - `InlineMediaProvider.java` contains a leftover **unused private `applyInlineSpan(...)`** method (a
   vestige of the stage-1 design). Harmless; the live path is `attachInlineSpan(...)`.
 - **Privacy/network behavior of remote URLs:** remote media is fetched with a plain `HttpURLConnection`
@@ -300,7 +298,7 @@ in subdirs. (There is no bundled/default pack — see *Known deviations*.)
 ## Quick file map
 
 ```
-signal-dev/                                  # design/reproduction notes (this fork's changelog)
+tools/                                       # build & helper scripts + release output (git-ignored APKs)
 app/build.gradle.kts                         # website flavor: .mod suffix, updater off
 app/src/website/res/                         # "Signal+" name + launcher icon
 app/src/main/java/.../components/emoji/
