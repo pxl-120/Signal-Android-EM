@@ -53,6 +53,7 @@ import org.thoughtcrime.securesms.apkupdate.ApkUpdateRefreshListener;
 import org.thoughtcrime.securesms.avatar.AvatarPickerStorage;
 import org.thoughtcrime.securesms.backup.v2.BackupRepository;
 import org.thoughtcrime.securesms.preferences.EditProxyActivity;
+import org.thoughtcrime.securesms.components.emoji.CustomEmojiPackUpdater;
 import org.thoughtcrime.securesms.conversation.drafts.DraftBlobs;
 import org.thoughtcrime.securesms.crypto.AppAttachmentSecretStore;
 import org.thoughtcrime.securesms.crypto.DatabaseSecretProvider;
@@ -239,6 +240,7 @@ public class ApplicationContext extends Application implements AppForegroundObse
               .addPostRender(EmojiSearchIndexDownloadJob::scheduleIfNecessary)
               .addPostRender(MessageSendLogCleanupJob::enqueue)
               .addPostRender(() -> JumboEmoji.updateCurrentVersion(this))
+              .addPostRender(this::initializeCustomEmojiPackUpdate)
               .addPostRender(RetrieveRemoteAnnouncementsJob::enqueue)
               .addPostRender(AndroidTelecomUtil::registerPhoneAccount)
               .addPostRender(() -> AppDependencies.getJobManager().add(new FontDownloaderJob()))
@@ -545,6 +547,10 @@ public class ApplicationContext extends Application implements AppForegroundObse
     if (BuildConfig.MANAGES_APP_UPDATES) {
       ApkUpdateRefreshListener.schedule(this);
     }
+  }
+
+  private void initializeCustomEmojiPackUpdate() {
+    SignalExecutors.BOUNDED.execute(() -> CustomEmojiPackUpdater.checkForUpdate(this));
   }
 
   private void initializeRingRtc() {

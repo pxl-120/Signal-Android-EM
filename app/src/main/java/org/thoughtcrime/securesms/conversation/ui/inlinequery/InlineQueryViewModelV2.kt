@@ -6,6 +6,7 @@ import io.reactivex.rxjava3.core.Observable
 import io.reactivex.rxjava3.schedulers.Schedulers
 import io.reactivex.rxjava3.subjects.BehaviorSubject
 import io.reactivex.rxjava3.subjects.PublishSubject
+import org.thoughtcrime.securesms.components.emoji.CustomEmojiRegistry
 import org.thoughtcrime.securesms.components.emoji.RecentEmojiPageModel
 import org.thoughtcrime.securesms.conversation.ui.mentions.MentionViewState
 import org.thoughtcrime.securesms.conversation.ui.mentions.MentionsPickerRepositoryV2
@@ -54,7 +55,31 @@ class InlineQueryViewModelV2(
   private fun queryEmoji(query: InlineQuery.Emoji): Observable<Results> {
     return emojiSearchRepository
       .submitQuery(query.query)
-      .map { r -> if (r.isEmpty()) None else EmojiResults(toMappingModels(r)) }
+      .map { standard ->
+        val standardModels = toMappingModels(standard)
+        val customModels = CustomEmojiRegistry.searchTokens(AppDependencies.application, query.query).map { token ->
+          InlineQueryEmojiResult.Model(
+            canonicalEmoji = token,
+            preferredEmoji = token
+          )
+        }
+
+        val ordered = if (SignalStore.settings.isCustomEmojiSearchFirst) {
+          customModels + standardModels
+        } else {
+          standardModels + customModels
+        }
+
+        val merged = ordered
+          .distinctBy {
+            when (it) {
+              is InlineQueryEmojiResult.Model -> it.canonicalEmoji
+              else -> it.javaClass.name
+            }
+          }
+
+        if (merged.isEmpty()) None else EmojiResults(merged)
+      }
       .toObservable()
   }
 

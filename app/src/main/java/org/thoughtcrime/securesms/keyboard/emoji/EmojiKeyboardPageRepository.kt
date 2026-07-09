@@ -2,6 +2,8 @@ package org.thoughtcrime.securesms.keyboard.emoji
 
 import android.content.Context
 import org.signal.core.util.concurrent.SignalExecutors
+import org.thoughtcrime.securesms.components.emoji.CustomEmojiPageModel
+import org.thoughtcrime.securesms.components.emoji.CustomEmojiRegistry
 import org.thoughtcrime.securesms.components.emoji.EmojiPageModel
 import org.thoughtcrime.securesms.components.emoji.RecentEmojiPageModel
 import org.thoughtcrime.securesms.emoji.EmojiSource.Companion.latest
@@ -12,8 +14,22 @@ class EmojiKeyboardPageRepository(private val context: Context) {
   fun getEmoji(consumer: Consumer<List<EmojiPageModel>>) {
     SignalExecutors.BOUNDED.execute {
       val list = mutableListOf<EmojiPageModel>()
+
       list += RecentEmojiPageModel(context, TextSecurePreferences.RECENT_STORAGE_KEY)
-      list += latest.displayPages
+
+      val standardPages = latest.displayPages.toMutableList()
+      val customTokens = CustomEmojiRegistry.getTokens(context)
+
+      if (standardPages.isNotEmpty()) {
+        list += standardPages.removeAt(0)
+      }
+
+      if (customTokens.isNotEmpty()) {
+        list += CustomEmojiPageModel(customTokens)
+      }
+
+      list += standardPages
+
       consumer.accept(list)
     }
   }

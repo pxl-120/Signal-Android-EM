@@ -28,6 +28,9 @@ import io.reactivex.rxjava3.android.schedulers.AndroidSchedulers;
 import io.reactivex.rxjava3.core.Observable;
 import io.reactivex.rxjava3.subjects.BehaviorSubject;
 
+import org.thoughtcrime.securesms.components.emoji.CustomEmojiPageModel;
+import org.thoughtcrime.securesms.keyboard.emoji.CustomMappingModel;
+
 public final class ReactWithAnyEmojiViewModel extends ViewModel {
 
   private static final int SEARCH_LIMIT = 40;
@@ -76,13 +79,19 @@ public final class ReactWithAnyEmojiViewModel extends ViewModel {
     this.categories = Observable.combineLatest(emojiPages, this.selectedKey.distinctUntilChanged(), (pages, selectedKey) -> {
       MappingModelList list = new MappingModelList();
       list.add(new RecentsMappingModel(RecentEmojiPageModel.KEY.equals(selectedKey)));
+
       list.addAll(pages.stream()
-                       .filter(p -> !RecentEmojiPageModel.KEY.equals(p.getKey()))
-                       .map(p -> {
-                         EmojiCategory category = EmojiCategory.forKey(p.getKey());
-                         return new EmojiCategoryMappingModel(category, category.getKey().equals(selectedKey));
-                       })
-                       .collect(Collectors.toList()));
+          .filter(p -> !RecentEmojiPageModel.KEY.equals(p.getKey()))
+          .map(p -> {
+            if (CustomEmojiPageModel.KEY.equals(p.getKey())) {
+              return new CustomMappingModel(CustomEmojiPageModel.KEY.equals(selectedKey));
+            } else {
+              EmojiCategory category = EmojiCategory.forKey(p.getKey());
+              return new EmojiCategoryMappingModel(category, category.getKey().equals(selectedKey));
+            }
+          })
+          .collect(Collectors.toList()));
+
       return list;
     });
 

@@ -120,6 +120,8 @@ import java.util.UUID
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 
+import org.thoughtcrime.securesms.components.emoji.CustomEmojiRegistry
+
 object DataMessageProcessor {
 
   private const val BODY_RANGE_PROCESSING_LIMIT = 250
@@ -410,8 +412,11 @@ object DataMessageProcessor {
     val storyContext = message.storyContext!!
     val emoji = message.reaction!!.emoji
 
-    if (!EmojiUtil.isEmoji(emoji)) {
-      warn(envelope.clientTimestamp!!, "Story reaction text is not a valid emoji! Ignoring the message.")
+    val isSupportedStoryReaction = emoji != null &&
+      (EmojiUtil.isEmoji(emoji) || CustomEmojiRegistry.isCustomToken(context.applicationContext, emoji))
+
+    if (!isSupportedStoryReaction) {
+      warn(envelope.clientTimestamp!!, "Story reaction text is not a valid emoji or custom token! Ignoring the message.")
       return null
     }
 
@@ -525,8 +530,11 @@ object DataMessageProcessor {
       return null
     }
 
-    if (!EmojiUtil.isEmoji(emoji)) {
-      warn(envelope.clientTimestamp!!, "Reaction text is not a valid emoji! Ignoring the message.")
+    val isSupportedReaction = emoji != null &&
+      (EmojiUtil.isEmoji(emoji) || CustomEmojiRegistry.isCustomToken(context.applicationContext, emoji))
+
+    if (!isSupportedReaction) {
+      warn(envelope.clientTimestamp!!, "Reaction text is not a valid emoji or custom token! Ignoring the message.")
       return null
     }
 

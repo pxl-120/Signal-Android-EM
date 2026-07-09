@@ -1,0 +1,4 @@
+# Signed APK build artifacts produced by ../build-and-sign.sh — large binaries,
+# not meant to be committed. Keep this directory tracked but ignore its contents.
+*
+!.gitignore

@@ -100,6 +100,7 @@ import org.thoughtcrime.securesms.components.QuoteView;
 import org.thoughtcrime.securesms.components.SharedContactView;
 import org.thoughtcrime.securesms.components.ThumbnailView;
 import org.thoughtcrime.securesms.components.emoji.EmojiTextView;
+import org.thoughtcrime.securesms.components.emoji.InlineMediaParser;
 import org.thoughtcrime.securesms.components.mention.MentionAnnotation;
 import org.thoughtcrime.securesms.contactshare.Contact;
 import org.thoughtcrime.securesms.conversation.clicklisteners.AttachmentCancelClickListener;
@@ -1144,12 +1145,23 @@ public final class ConversationItem extends RelativeLayout implements BindableCo
     return MessageRecordUtil.hasSharedContact(messageRecord);
   }
 
+  private boolean shouldSuppressLinkPreview(@NonNull MessageRecord messageRecord) {
+    if (!SignalStore.settings().isInlineUrlMediaEnabled() || !MessageRecordUtil.hasLinkPreview(messageRecord)) {
+      return false;
+    }
+
+    Spannable body = conversationMessage.getDisplayBody(getContext());
+    return body != null && !InlineMediaParser.find(body).isEmpty();
+  }
+
   private boolean hasLinkPreview(MessageRecord messageRecord) {
-    return MessageRecordUtil.hasLinkPreview(messageRecord);
+    return MessageRecordUtil.hasLinkPreview(messageRecord) && !shouldSuppressLinkPreview(messageRecord);
   }
 
   private boolean hasBigImageLinkPreview(MessageRecord messageRecord) {
-    return MessageRecordUtil.hasBigImageLinkPreview(messageRecord, context) && !isContentCondensed();
+    return MessageRecordUtil.hasBigImageLinkPreview(messageRecord, context)
+        && !isContentCondensed()
+        && !shouldSuppressLinkPreview(messageRecord);
   }
 
   private boolean isViewOnceMessage(MessageRecord messageRecord) {

@@ -28,6 +28,9 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.thoughtcrime.securesms.components.emoji.CustomEmojiRegistry;
+import org.thoughtcrime.securesms.dependencies.AppDependencies;
+
 public class ReactionsConversationView extends LinearLayout {
 
   // Normally 6dp, but we have 1dp left+right margin on the pills themselves
@@ -143,7 +146,15 @@ public class ReactionsConversationView extends LinearLayout {
     RecipientId           selfId   = Recipient.self().getId();
 
     for (ReactionRecord record : records) {
-      String   baseEmoji = EmojiUtil.getCanonicalRepresentation(record.getEmoji());
+      String emoji     = record.getEmoji();
+      String baseEmoji = CustomEmojiRegistry.isCustomToken(AppDependencies.getApplication(), emoji)
+                         ? emoji
+                         : EmojiUtil.getCanonicalRepresentation(emoji);
+
+      if (baseEmoji == null || baseEmoji.isEmpty()) {
+        continue;
+      }
+
       Reaction info      = counters.get(baseEmoji);
 
       if (info == null) {

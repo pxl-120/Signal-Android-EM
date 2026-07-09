@@ -38,12 +38,35 @@ class AppearanceSettingsViewModel : ViewModel() {
     SignalStore.settings.messageFontSize = size
   }
 
+  fun setInlineUrlMediaEnabled(enabled: Boolean) {
+    store.update { it.copy(inlineUrlMediaEnabled = enabled) }
+    SignalStore.settings.isInlineUrlMediaEnabled = enabled
+  }
+
+  fun setCustomEmojiSearchFirst(enabled: Boolean) {
+    store.update { it.copy(customEmojiSearchFirst = enabled) }
+    SignalStore.settings.isCustomEmojiSearchFirst = enabled
+  }
+
+  fun setCustomEmojiImportFromUrl(enabled: Boolean) {
+    store.update { it.copy(customEmojiImportFromUrl = enabled) }
+    SignalStore.settings.isCustomEmojiImportFromUrl = enabled
+  }
+
   private fun getState(): AppearanceSettingsState {
     return AppearanceSettingsState(
       SignalStore.settings.theme,
       SignalStore.settings.messageFontSize,
       SignalStore.settings.language,
-      SignalStore.settings.useCompactNavigationBar
+      SignalStore.settings.useCompactNavigationBar,
+      SignalStore.settings.isInlineUrlMediaEnabled,
+      SignalStore.settings.isCustomEmojiSearchFirst,
+      SignalStore.settings.isCustomEmojiImportFromUrl,
+      SignalStore.settings.customEmojiPackZipUrl,
+      SignalStore.settings.customEmojiPackVersionUrl,
+      SignalStore.settings.customEmojiPackVersion,
+      SignalStore.settings.customEmojiPackLastCheck,
+      SignalStore.settings.customEmojiPackLastUpdate
     )
   }
 }

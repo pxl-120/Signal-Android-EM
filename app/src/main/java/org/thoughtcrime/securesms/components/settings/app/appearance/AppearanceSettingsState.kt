@@ -6,5 +6,13 @@ data class AppearanceSettingsState(
   val theme: SettingsValues.Theme,
   val messageFontSize: Int,
   val language: String,
-  val isCompactNavigationBar: Boolean
+  val isCompactNavigationBar: Boolean,
+  val inlineUrlMediaEnabled: Boolean,
+  val customEmojiSearchFirst: Boolean,
+  val customEmojiImportFromUrl: Boolean,
+  val customEmojiPackZipUrl: String,
+  val customEmojiPackVersionUrl: String,
+  val customEmojiPackVersion: String,
+  val customEmojiPackLastCheck: Long,
+  val customEmojiPackLastUpdate: Long
 )
