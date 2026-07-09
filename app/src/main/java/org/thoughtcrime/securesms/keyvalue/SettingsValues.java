@@ -69,6 +69,14 @@ public final class SettingsValues extends SignalStoreValues {
   private static final String CENSORSHIP_CIRCUMVENTION_ENABLED        = "settings.censorshipCircumventionEnabled";
   private static final String KEEP_MUTED_CHATS_ARCHIVED               = "settings.keepMutedChatsArchived";
   private static final String USE_COMPACT_NAVIGATION_BAR              = "settings.useCompactNavigationBar";
+  private static final String INLINE_URL_MEDIA_ENABLED                = "settings.signalplus.inlineUrlMediaEnabled";
+  private static final String CUSTOM_EMOJI_SEARCH_FIRST               = "settings.signalplus.customEmoji.searchFirst";
+  private static final String CUSTOM_EMOJI_IMPORT_FROM_URL            = "settings.signalplus.customEmoji.importFromUrl";
+  private static final String CUSTOM_EMOJI_PACK_ZIP_URL               = "settings.signalplus.customEmoji.packZipUrl";
+  private static final String CUSTOM_EMOJI_PACK_VERSION_URL           = "settings.signalplus.customEmoji.packVersionUrl";
+  private static final String CUSTOM_EMOJI_PACK_VERSION               = "settings.signalplus.customEmoji.packVersion";
+  private static final String CUSTOM_EMOJI_PACK_LAST_CHECK            = "settings.signalplus.customEmoji.lastCheck";
+  private static final String CUSTOM_EMOJI_PACK_LAST_UPDATE           = "settings.signalplus.customEmoji.lastUpdate";
   private static final String THREAD_TRIM_SYNC_TO_LINKED_DEVICES      = "settings.storage.syncThreadTrimDeletes";
   private static final String PASSPHRASE_DISABLED                     = "settings.passphrase.disabled";
   private static final String PASSPHRASE_TIMEOUT_ENABLED              = "settings.passphrase.timeout.enabled";
@@ -147,6 +155,11 @@ public final class SettingsValues extends SignalStoreValues {
                          SENT_MEDIA_QUALITY,
                          KEEP_MUTED_CHATS_ARCHIVED,
                          USE_COMPACT_NAVIGATION_BAR,
+                         INLINE_URL_MEDIA_ENABLED,
+                         CUSTOM_EMOJI_SEARCH_FIRST,
+                         CUSTOM_EMOJI_IMPORT_FROM_URL,
+                         CUSTOM_EMOJI_PACK_ZIP_URL,
+                         CUSTOM_EMOJI_PACK_VERSION_URL,
                          THREAD_TRIM_SYNC_TO_LINKED_DEVICES,
                          PASSPHRASE_DISABLED,
                          PASSPHRASE_TIMEOUT_ENABLED,
@@ -519,6 +532,73 @@ public final class SettingsValues extends SignalStoreValues {
 
   public boolean getUseCompactNavigationBar() {
     return getBoolean(USE_COMPACT_NAVIGATION_BAR, false);
+  }
+
+  public void setInlineUrlMediaEnabled(boolean enabled) {
+    putBoolean(INLINE_URL_MEDIA_ENABLED, enabled);
+  }
+
+  public boolean isInlineUrlMediaEnabled() {
+    return getBoolean(INLINE_URL_MEDIA_ENABLED, false);
+  }
+
+  public void setCustomEmojiSearchFirst(boolean enabled) {
+    putBoolean(CUSTOM_EMOJI_SEARCH_FIRST, enabled);
+  }
+
+  public boolean isCustomEmojiSearchFirst() {
+    return getBoolean(CUSTOM_EMOJI_SEARCH_FIRST, false);
+  }
+
+  public void setCustomEmojiImportFromUrl(boolean enabled) {
+    putBoolean(CUSTOM_EMOJI_IMPORT_FROM_URL, enabled);
+  }
+
+  public boolean isCustomEmojiImportFromUrl() {
+    return getBoolean(CUSTOM_EMOJI_IMPORT_FROM_URL, false);
+  }
+
+  public void setCustomEmojiPackZipUrl(@NonNull String url) {
+    putString(CUSTOM_EMOJI_PACK_ZIP_URL, url);
+  }
+
+  public @NonNull String getCustomEmojiPackZipUrl() {
+    String value = getString(CUSTOM_EMOJI_PACK_ZIP_URL, "");
+    return value != null ? value : "";
+  }
+
+  public void setCustomEmojiPackVersionUrl(@NonNull String url) {
+    putString(CUSTOM_EMOJI_PACK_VERSION_URL, url);
+  }
+
+  public @NonNull String getCustomEmojiPackVersionUrl() {
+    String value = getString(CUSTOM_EMOJI_PACK_VERSION_URL, "");
+    return value != null ? value : "";
+  }
+
+  public void setCustomEmojiPackVersion(@NonNull String version) {
+    putString(CUSTOM_EMOJI_PACK_VERSION, version);
+  }
+
+  public @NonNull String getCustomEmojiPackVersion() {
+    String value = getString(CUSTOM_EMOJI_PACK_VERSION, "");
+    return value != null ? value : "";
+  }
+
+  public void setCustomEmojiPackLastCheck(long timestamp) {
+    putLong(CUSTOM_EMOJI_PACK_LAST_CHECK, timestamp);
+  }
+
+  public long getCustomEmojiPackLastCheck() {
+    return getLong(CUSTOM_EMOJI_PACK_LAST_CHECK, 0L);
+  }
+
+  public void setCustomEmojiPackLastUpdate(long timestamp) {
+    putLong(CUSTOM_EMOJI_PACK_LAST_UPDATE, timestamp);
+  }
+
+  public long getCustomEmojiPackLastUpdate() {
+    return getLong(CUSTOM_EMOJI_PACK_LAST_UPDATE, 0L);
   }
 
   public void setPassphraseDisabled(boolean disabled) {

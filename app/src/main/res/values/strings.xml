@@ -7,6 +7,24 @@
 
 <!-- smartling.instruction_comments_enabled = on -->
 <resources>
+
+<string name="appearance_settings__import_custom_emote_pack">Import custom emote pack</string>
+<string name="custom_emoji__category">Custom</string>
+<string name="appearance_settings__signal_plus_section">Signal+ settings</string>
+<string name="appearance_settings__render_inline_url_media">Render link images &amp; GIFs inline</string>
+<string name="appearance_settings__render_inline_url_media_warning">When on, media linked in a message as :url: is downloaded and shown inline. This contacts third-party servers directly on render and can leak your IP address, weakening some of Signal\'s privacy protections. Off by default.</string>
+<string name="appearance_settings__show_custom_emoji_first">Show custom emoji first in search</string>
+<string name="appearance_settings__show_custom_emoji_first_label">When on, matching custom emoji are listed before standard emoji in the :emoji: autocomplete and emoji search. Off by default.</string>
+<string name="appearance_settings__custom_emote_pack_source">Custom emote pack source</string>
+<string name="appearance_settings__import_from_local_file">Local file</string>
+<string name="appearance_settings__import_from_url">From URL</string>
+<string name="appearance_settings__pack_zip_url">Pack .zip URL</string>
+<string name="appearance_settings__pack_version_url">Version URL</string>
+<string name="appearance_settings__download_and_apply">Download &amp; apply</string>
+<string name="appearance_settings__current_version">Current version: %1$s</string>
+<string name="appearance_settings__last_version_check">Last version check: %1$s</string>
+<string name="appearance_settings__last_update">Last update: %1$s</string>
+
     <string name="app_name" translatable="false">Signal</string>
 
     <string name="install_url" translatable="false">https://signal.org/install</string>

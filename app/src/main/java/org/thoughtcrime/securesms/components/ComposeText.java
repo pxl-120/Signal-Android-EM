@@ -52,6 +52,16 @@ import java.util.regex.Pattern;
 
 import static org.thoughtcrime.securesms.database.MentionUtil.MENTION_STARTER;
 
+import android.text.Editable;
+import android.text.Selection;
+import android.text.SpannableStringBuilder;
+import android.text.TextWatcher;
+
+import org.thoughtcrime.securesms.components.emoji.CustomEmojiAliasResolver;
+import org.thoughtcrime.securesms.components.emoji.CustomEmojiRegistry;
+import org.thoughtcrime.securesms.components.emoji.InlineMediaProvider;
+import org.thoughtcrime.securesms.components.emoji.InlineMediaSpan;
+
 public class ComposeText extends EmojiEditText {
 
   private static final String  TAG              = Log.tag(ComposeText.class);
@@ -68,6 +78,89 @@ public class ComposeText extends EmojiEditText {
   @Nullable private CursorPositionChangedListener cursorPositionChangedListener;
   @Nullable private InlineQueryChangedListener    inlineQueryChangedListener;
   @Nullable private StylingChangedListener        stylingChangedListener;
+
+  private boolean inlineMediaChangeInProgress = false;
+
+  private final TextWatcher inlineMediaWatcher = new TextWatcher() {
+    @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+    @Override public void onTextChanged(CharSequence s, int start, int before, int count) {}
+
+    @Override
+    public void afterTextChanged(Editable s) {
+      if (inlineMediaChangeInProgress || s == null) {
+        return;
+      }
+
+      inlineMediaChangeInProgress = true;
+      try {
+        CustomEmojiAliasResolver.swapCompletedAliases(s, getContext());
+
+        int selectionStart = getSelectionStart();
+        int selectionEnd   = getSelectionEnd();
+
+        SpannableStringBuilder updated = InlineMediaProvider.inlinify(s, ComposeText.this);
+        if (!sameTextAndInlineSpans(s, updated)) {
+          s.replace(0, s.length(), updated);
+          int newLen = s.length();
+          Selection.setSelection(
+              s,
+              Math.max(0, Math.min(selectionStart, newLen)),
+              Math.max(0, Math.min(selectionEnd, newLen))
+          );
+        }
+      } finally {
+        inlineMediaChangeInProgress = false;
+      }
+    }
+  };
+
+  private boolean isClosingColonOfCustomEmojiToken(@NonNull CharSequence text, int colonIndex) {
+    Context appContext = getContext().getApplicationContext();
+    return matchesCustomNameEndingAt(text, colonIndex, CustomEmojiRegistry.getTokens(appContext)) ||
+           matchesCustomNameEndingAt(text, colonIndex, CustomEmojiRegistry.getAliases(appContext));
+  }
+
+  private static boolean matchesCustomNameEndingAt(@NonNull CharSequence text, int colonIndex, @NonNull List<String> names) {
+    for (String name : names) {
+      int start = colonIndex - name.length() + 1;
+
+      if (start < 0) {
+        continue;
+      }
+
+      if (text.subSequence(start, colonIndex + 1).toString().equals(name)) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  private boolean sameTextAndInlineSpans(@NonNull Editable current, @NonNull SpannableStringBuilder updated) {
+    if (!current.toString().contentEquals(updated)) {
+      return false;
+    }
+
+    InlineMediaSpan[] currentSpans = current.getSpans(0, current.length(), InlineMediaSpan.class);
+    InlineMediaSpan[] updatedSpans = updated.getSpans(0, updated.length(), InlineMediaSpan.class);
+
+    if (currentSpans.length != updatedSpans.length) {
+      return false;
+    }
+
+    for (int i = 0; i < currentSpans.length; i++) {
+      int cs = current.getSpanStart(currentSpans[i]);
+      int ce = current.getSpanEnd(currentSpans[i]);
+      int us = updated.getSpanStart(updatedSpans[i]);
+      int ue = updated.getSpanEnd(updatedSpans[i]);
+
+      if (cs != us || ce != ue) {
+        return false;
+      }
+    }
+
+    return true;
+  }
 
   public ComposeText(Context context) {
     super(context);
@@ -332,6 +425,8 @@ public class ComposeText extends EmojiEditText {
       @Override
       public void onDestroyActionMode(ActionMode mode) {}
     });
+
+    addTextChangedListener(inlineMediaWatcher);
   }
 
   private void setHintWithChecks(@Nullable CharSequence newHint) {
@@ -467,9 +562,13 @@ public class ComposeText extends EmojiEditText {
     if (delimiterSearchIndex >= 0 && text.charAt(delimiterSearchIndex) == starter) {
       if (couldBeTimeEntry(text, delimiterSearchIndex)) {
         return -1;
-      } else {
-        return delimiterSearchIndex + 1;
       }
+
+      if (starter == EMOJI_STARTER && isClosingColonOfCustomEmojiToken(text, delimiterSearchIndex)) {
+        return -1;
+      }
+
+      return delimiterSearchIndex + 1;
     }
     return -1;
   }

@@ -5,12 +5,14 @@ import android.net.Uri
 import io.reactivex.rxjava3.core.Single
 import io.reactivex.rxjava3.schedulers.Schedulers
 import org.signal.core.util.concurrent.SignalExecutors
+import org.thoughtcrime.securesms.components.emoji.CustomEmojiRegistry
 import org.thoughtcrime.securesms.components.emoji.Emoji
 import org.thoughtcrime.securesms.components.emoji.EmojiPageModel
 import org.thoughtcrime.securesms.components.emoji.RecentEmojiPageModel
 import org.thoughtcrime.securesms.database.EmojiSearchTable
 import org.thoughtcrime.securesms.database.SignalDatabase
 import org.thoughtcrime.securesms.emoji.EmojiSource
+import org.thoughtcrime.securesms.keyvalue.SignalStore
 import org.thoughtcrime.securesms.util.TextSecurePreferences
 import java.util.function.Consumer
 
@@ -25,29 +27,59 @@ class EmojiSearchRepository(private val context: Context) {
   private val emojiSearchTable: EmojiSearchTable = SignalDatabase.emojiSearch
 
   fun submitQuery(query: String, limit: Int = EMOJI_SEARCH_LIMIT): Single<List<String>> {
-    val result = if (query.length >= MINIMUM_INLINE_QUERY_THRESHOLD && NOT_PUNCTUATION.matches(query.substring(query.lastIndex))) {
-      Single.fromCallable { emojiSearchTable.query(query, limit) }
-    } else {
-      Single.just(emptyList())
-    }
+    val result =
+      if (query.length >= MINIMUM_INLINE_QUERY_THRESHOLD &&
+        NOT_PUNCTUATION.matches(query.substring(query.lastIndex))
+      ) {
+        Single.fromCallable {
+          val standard = emojiSearchTable.query(query, limit)
+          mergeCustomTokens(query, standard, limit)
+        }
+      } else {
+        Single.just(emptyList())
+      }
 
     return result.subscribeOn(Schedulers.io())
   }
 
-  fun submitQuery(query: String, includeRecents: Boolean, limit: Int = EMOJI_SEARCH_LIMIT, consumer: Consumer<EmojiPageModel>) {
+  fun submitQuery(
+    query: String,
+    includeRecents: Boolean,
+    limit: Int = EMOJI_SEARCH_LIMIT,
+    consumer: Consumer<EmojiPageModel>
+  ) {
     if (query.length < MINIMUM_QUERY_THRESHOLD && includeRecents) {
       consumer.accept(RecentEmojiPageModel(context, TextSecurePreferences.RECENT_STORAGE_KEY))
     } else {
       SignalExecutors.SERIAL.execute {
-        val emoji: List<String> = emojiSearchTable.query(query, limit)
+        val standard: List<String> = emojiSearchTable.query(query, limit)
+        val merged: List<String> = mergeCustomTokens(query, standard, limit)
 
-        val displayEmoji: List<Emoji> = emoji
-          .mapNotNull { canonical -> EmojiSource.latest.canonicalToVariations[canonical] }
-          .map { Emoji(it) }
+        val displayEmoji: List<Emoji> = merged.mapNotNull { value ->
+          EmojiSource.latest.canonicalToVariations[value]?.let { Emoji(it) }
+            ?: if (CustomEmojiRegistry.isCustomToken(context.applicationContext, value)) Emoji(value) else null
+        }
 
-        consumer.accept(EmojiSearchResultsPageModel(emoji, displayEmoji))
+        consumer.accept(EmojiSearchResultsPageModel(merged, displayEmoji))
       }
     }
+  }
+
+  private fun mergeCustomTokens(query: String, standard: List<String>, limit: Int): List<String> {
+    val custom = CustomEmojiRegistry.searchTokens(context.applicationContext, query)
+    if (custom.isEmpty()) {
+      return standard.take(limit)
+    }
+
+    val ordered = if (SignalStore.settings.isCustomEmojiSearchFirst) {
+      custom + standard
+    } else {
+      standard + custom
+    }
+
+    return ordered
+      .distinct()
+      .take(limit)
   }
 
   private class EmojiSearchResultsPageModel(

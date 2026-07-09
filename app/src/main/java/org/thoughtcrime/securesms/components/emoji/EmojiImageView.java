@@ -32,9 +32,16 @@ public class EmojiImageView extends AppCompatImageView {
   public void setImageEmoji(CharSequence emoji) {
     if (isInEditMode()) {
       setImageResource(R.drawable.ic_emoji);
-    } else {
-      setImageDrawable(EmojiProvider.getEmojiDrawable(getContext(), emoji, forceJumboEmoji));
-      setContentDescription(emoji);
+      return;
     }
+
+    setContentDescription(emoji);
+
+    if (CustomEmojiRegistry.isCustomToken(getContext(), emoji)) {
+      CustomEmojiImageBinder.bind(this, emoji);
+      return;
+    }
+
+    setImageDrawable(EmojiProvider.getEmojiDrawable(getContext(), emoji, forceJumboEmoji));
   }
 }

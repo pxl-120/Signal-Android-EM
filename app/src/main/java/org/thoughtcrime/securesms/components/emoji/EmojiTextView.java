@@ -330,6 +330,7 @@ public class EmojiTextView extends AppCompatTextView {
       textToSet = new SpannableStringBuilder(EmojiProvider.emojify(candidates, text, this, isJumbomoji || forceJumboEmoji));
     }
 
+    textToSet = InlineMediaProvider.inlinify(textToSet, this);
     return textToSet;
   }
 

@@ -8,7 +8,11 @@ import org.thoughtcrime.securesms.components.emoji.RecentEmojiPageModel
 import org.thoughtcrime.securesms.emoji.EmojiCategory
 import org.thoughtcrime.securesms.keyboard.KeyboardPageCategoryIconMappingModel
 
-class RecentsMappingModel(override val selected: Boolean) : KeyboardPageCategoryIconMappingModel<RecentsMappingModel> {
+import org.thoughtcrime.securesms.components.emoji.CustomEmojiPageModel
+
+class RecentsMappingModel(
+  override val selected: Boolean
+) : KeyboardPageCategoryIconMappingModel<RecentsMappingModel> {
   override val key: String = RecentEmojiPageModel.KEY
 
   override fun getIcon(context: Context): Drawable {
@@ -28,7 +32,10 @@ class RecentsMappingModel(override val selected: Boolean) : KeyboardPageCategory
   }
 }
 
-class EmojiCategoryMappingModel(private val emojiCategory: EmojiCategory, override val selected: Boolean) : KeyboardPageCategoryIconMappingModel<EmojiCategoryMappingModel> {
+class EmojiCategoryMappingModel(
+  private val emojiCategory: EmojiCategory,
+  override val selected: Boolean
+) : KeyboardPageCategoryIconMappingModel<EmojiCategoryMappingModel> {
   override val key: String = emojiCategory.key
 
   override fun getIcon(context: Context): Drawable {
@@ -47,5 +54,27 @@ class EmojiCategoryMappingModel(private val emojiCategory: EmojiCategory, overri
     return areItemsTheSame(newItem) &&
       selected == newItem.selected &&
       newItem.emojiCategory == emojiCategory
+  }
+}
+
+class CustomMappingModel(
+  override val selected: Boolean
+) : KeyboardPageCategoryIconMappingModel<CustomMappingModel> {
+  override val key: String = CustomEmojiPageModel.KEY
+
+  override fun getIcon(context: Context): Drawable {
+    return requireNotNull(ThemeUtil.getThemedDrawable(context, R.attr.emoji_category_objects))
+  }
+
+  override fun getContentDescription(context: Context): String {
+    return context.getString(R.string.custom_emoji__category)
+  }
+
+  override fun areItemsTheSame(newItem: CustomMappingModel): Boolean {
+    return newItem.key == key
+  }
+
+  override fun areContentsTheSame(newItem: CustomMappingModel): Boolean {
+    return areItemsTheSame(newItem) && selected == newItem.selected
   }
 }
