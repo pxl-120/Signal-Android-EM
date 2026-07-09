@@ -181,4 +181,7 @@ log "Signing certificate (record this — every future update must use the same 
 "$APKSIGNER" verify --print-certs "${signed[0]}" | grep -i 'SHA-256' | head -1 | sed 's/^/    /' || true
 
 echo
-log "Install with, e.g.:  adb install \"${signed[1]}\""
+# pick a sensible install example: prefer arm64-v8a (most phones), else the first signed
+example="${signed[0]}"
+for f in "${signed[@]}"; do [[ "$f" == *arm64-v8a* ]] && example="$f"; done
+log "Install with, e.g.:  adb install \"$example\""
