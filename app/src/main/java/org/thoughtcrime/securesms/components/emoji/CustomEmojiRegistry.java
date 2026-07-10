@@ -44,14 +44,19 @@ import java.util.Set;
  *       contain a colon, e.g. {@code D:}) used <i>only</i> for search and type-in. An alias never
  *       renders and is never sent; the picker / autocomplete / type-in swap converts it to the token
  *       first.</li>
+ *   <li>zero or more optional <b>literals</b> — like aliases, alternative names used <i>only</i> for
+ *       search and type-in that never render and are never sent, but typed with <b>no</b> surrounding
+ *       colons (e.g. {@code o7}, {@code :D}). A literal is recognised in the compose field only as a
+ *       whole whitespace-delimited word completed by a space (see {@link CustomEmojiLiteralResolver}).</li>
  * </ul>
  *
- * <p>Names are stored <b>bare</b> (without the wrapping colons). Every method that talks to the rest of
- * the app speaks the colon-wrapped {@code :name:} form — the form that lives in message text — so the
- * wrapping is applied/stripped at this boundary only ({@link #wrap} / {@link #unwrap}). Every token and
- * alias is globally unique across the whole pack, so a name resolves to exactly one emoji. Rendering
- * ({@link CustomEmojiParser}, {@link #isCustomToken}, {@link #getSource}) operates on tokens only;
- * aliases live in a separate map.
+ * <p>Token and alias names are stored <b>bare</b> (without the wrapping colons); the methods that expose
+ * them speak the colon-wrapped {@code :name:} form — the form that lives in message text — so the
+ * wrapping is applied/stripped at this boundary only ({@link #wrap} / {@link #unwrap}). Literals are the
+ * exception: because they are typed without colons, they are stored and exposed verbatim. Every token,
+ * alias and literal is globally unique across the whole pack, so a name resolves to exactly one emoji.
+ * Rendering ({@link CustomEmojiParser}, {@link #isCustomToken}, {@link #getSource}) operates on tokens
+ * only; aliases and literals live in separate maps.
  */
 public final class CustomEmojiRegistry {
 
@@ -70,6 +75,11 @@ public final class CustomEmojiRegistry {
   // Exposed lists, colon-wrapped (":name:"), longest first.
   private static List<String> wrappedTokens  = Collections.emptyList();
   private static List<String> wrappedAliases = Collections.emptyList();
+
+  // Literals are typed WITHOUT wrapping colons, so — unlike tokens and aliases — they are stored and
+  // exposed verbatim (never wrapped), and matched as whole words by CustomEmojiLiteralResolver.
+  private static Map<String, String> literalToToken = Collections.emptyMap();  // verbatim literal -> bare token
+  private static List<String>        literals       = Collections.emptyList(); // verbatim literals, longest first
 
   private CustomEmojiRegistry() {}
 
@@ -123,10 +133,29 @@ public final class CustomEmojiRegistry {
     return token == null ? null : wrap(token);
   }
 
+  /** All registered literals, verbatim (as typed, no wrapping colons), longest first. */
+  public static @NonNull List<String> getLiterals(@NonNull Context context) {
+    ensureLoaded(context);
+    return literals;
+  }
+
   /**
-   * Tokens matching a search query — matched by token <i>or</i> alias name — ordered alphabetically.
-   * Always returns canonical tokens in {@code :token:} form, so searching by an alias still inserts the
-   * token. Shared by the {@code :}-autocomplete popup and the emoji-picker search.
+   * The canonical token ({@code :token:} form) for a literal, or null if it isn't a known literal. The
+   * literal is matched verbatim (it carries no wrapping colons), unlike {@link #getAliasToken}.
+   */
+  public static @Nullable String getLiteralToken(@NonNull Context context, @Nullable CharSequence literal) {
+    ensureLoaded(context);
+    if (literal == null) {
+      return null;
+    }
+    String token = literalToToken.get(literal.toString());
+    return token == null ? null : wrap(token);
+  }
+
+  /**
+   * Tokens matching a search query — matched by token, alias <i>or</i> literal name — ordered
+   * alphabetically. Always returns canonical tokens in {@code :token:} form, so searching by an alias or
+   * literal still inserts the token. Shared by the {@code :}-autocomplete popup and the emoji-picker search.
    */
   public static @NonNull List<String> searchTokens(@NonNull Context context, @NonNull String rawQuery) {
     ensureLoaded(context);
@@ -148,6 +177,11 @@ public final class CustomEmojiRegistry {
         matchedBare.add(entry.getValue());
       }
     }
+    for (Map.Entry<String, String> entry : literalToToken.entrySet()) {
+      if (normalizeForSearch(entry.getKey()).contains(query)) {
+        matchedBare.add(entry.getValue());
+      }
+    }
 
     List<String> result = new ArrayList<>(matchedBare.size());
     for (String bare : matchedBare) {
@@ -162,8 +196,10 @@ public final class CustomEmojiRegistry {
       loaded         = false;
       tokenToSource  = Collections.emptyMap();
       aliasToToken   = Collections.emptyMap();
+      literalToToken = Collections.emptyMap();
       wrappedTokens  = Collections.emptyList();
       wrappedAliases = Collections.emptyList();
+      literals       = Collections.emptyList();
     }
   }
 
@@ -191,9 +227,10 @@ public final class CustomEmojiRegistry {
         return;
       }
 
-      Map<String, String> sourceMap = new HashMap<>();
-      Map<String, String> aliasMap  = new LinkedHashMap<>();
-      loadFromJson(context.getApplicationContext(), sourceMap, aliasMap);
+      Map<String, String> sourceMap  = new HashMap<>();
+      Map<String, String> aliasMap   = new LinkedHashMap<>();
+      Map<String, String> literalMap = new LinkedHashMap<>();
+      loadFromJson(context.getApplicationContext(), sourceMap, aliasMap, literalMap);
 
       List<String> sortedTokens = new ArrayList<>(sourceMap.size());
       for (String bare : sourceMap.keySet()) {
@@ -207,29 +244,35 @@ public final class CustomEmojiRegistry {
       }
       sortedAliases.sort(Comparator.comparingInt(String::length).reversed());
 
+      // Literals are used verbatim (no wrapping); still longest-first so a longer literal wins a tie.
+      List<String> sortedLiterals = new ArrayList<>(literalMap.keySet());
+      sortedLiterals.sort(Comparator.comparingInt(String::length).reversed());
+
       tokenToSource  = Collections.unmodifiableMap(sourceMap);
       aliasToToken   = Collections.unmodifiableMap(aliasMap);
+      literalToToken = Collections.unmodifiableMap(literalMap);
       wrappedTokens  = Collections.unmodifiableList(sortedTokens);
       wrappedAliases = Collections.unmodifiableList(sortedAliases);
+      literals       = Collections.unmodifiableList(sortedLiterals);
       loaded         = true;
     }
   }
 
-  private static void loadFromJson(@NonNull Context context, @NonNull Map<String, String> sourceMap, @NonNull Map<String, String> aliasMap) {
+  private static void loadFromJson(@NonNull Context context, @NonNull Map<String, String> sourceMap, @NonNull Map<String, String> aliasMap, @NonNull Map<String, String> literalMap) {
     File configFile = new File(context.getFilesDir(), CONFIG_RELATIVE_PATH);
     if (!configFile.isFile()) {
       return;
     }
 
     try (InputStream in = new FileInputStream(configFile)) {
-      parseJson(in, sourceMap, aliasMap, configFile.getParentFile());
-      Log.i(TAG, "Loaded " + sourceMap.size() + " custom emotes (" + aliasMap.size() + " aliases) from " + configFile.getAbsolutePath());
+      parseJson(in, sourceMap, aliasMap, literalMap, configFile.getParentFile());
+      Log.i(TAG, "Loaded " + sourceMap.size() + " custom emotes (" + aliasMap.size() + " aliases, " + literalMap.size() + " literals) from " + configFile.getAbsolutePath());
     } catch (Throwable t) {
       Log.w(TAG, "Could not load custom emotes from " + configFile.getAbsolutePath(), t);
     }
   }
 
-  private static void parseJson(@NonNull InputStream in, @NonNull Map<String, String> sourceMap, @NonNull Map<String, String> aliasMap, @Nullable File baseDir) throws Exception {
+  private static void parseJson(@NonNull InputStream in, @NonNull Map<String, String> sourceMap, @NonNull Map<String, String> aliasMap, @NonNull Map<String, String> literalMap, @Nullable File baseDir) throws Exception {
     String json   = readAllText(in);
     Object parsed = new JSONTokener(json).nextValue();
 
@@ -247,7 +290,7 @@ public final class CustomEmojiRegistry {
       return;
     }
 
-    // Enforces global uniqueness of every token and alias (bare names) across the whole pack.
+    // Enforces global uniqueness of every token, alias and literal (bare names) across the whole pack.
     Set<String> usedNames = new HashSet<>();
 
     for (int i = 0; i < emoji.length(); i++) {
@@ -291,6 +334,21 @@ public final class CustomEmojiRegistry {
             continue;
           }
           aliasMap.put(alias, token);
+        }
+      }
+
+      JSONArray literalArray = obj.optJSONArray("literals");
+      if (literalArray != null) {
+        for (int j = 0; j < literalArray.length(); j++) {
+          String literal = normalizeName(literalArray.optString(j, null));
+          if (literal == null) {
+            continue;
+          }
+          if (!usedNames.add(literal)) {
+            Log.w(TAG, "Skipping duplicate name (literal): " + literal);
+            continue;
+          }
+          literalMap.put(literal, token);
         }
       }
     }

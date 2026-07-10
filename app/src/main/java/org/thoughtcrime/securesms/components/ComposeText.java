@@ -61,6 +61,7 @@ import android.text.SpannableStringBuilder;
 import android.text.TextWatcher;
 
 import org.thoughtcrime.securesms.components.emoji.CustomEmojiAliasResolver;
+import org.thoughtcrime.securesms.components.emoji.CustomEmojiLiteralResolver;
 import org.thoughtcrime.securesms.components.emoji.CustomEmojiRegistry;
 import org.thoughtcrime.securesms.components.emoji.InlineMediaProvider;
 import org.thoughtcrime.securesms.components.emoji.InlineMediaSpan;
@@ -98,6 +99,7 @@ public class ComposeText extends EmojiEditText {
       inlineMediaChangeInProgress = true;
       try {
         CustomEmojiAliasResolver.swapCompletedAliases(s, getContext());
+        CustomEmojiLiteralResolver.swapCompletedLiterals(s, getContext());
 
         int selectionStart = getSelectionStart();
         int selectionEnd   = getSelectionEnd();

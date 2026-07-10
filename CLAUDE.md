@@ -25,6 +25,10 @@ Signal:
   the receive side (upstream would otherwise drop any reaction that isn't a real Unicode emoji).
 - **Searchable custom emoji (with aliases)** — custom emoji are found in the `:`-autocomplete popup and
   the picker search by their token *or* any alias; selecting or typing an alias resolves to the token.
+- **Literal (colon-free) triggers** — an emoji can also declare **literals**: bare words typed *without*
+  colons (e.g. `o7`, `:D`) that, once written as a whole whitespace-delimited word and completed with a
+  space, are swapped to the emoji's `:token:` in the compose field (the triggering space is consumed).
+  Like aliases they're search / type-in only and never sent, and they raise no autocomplete popup.
 
 The fork is branded **"Signal+"** and installs side-by-side with official Signal (see *Build &
 branding* below).
@@ -86,7 +90,7 @@ changes above are on the **website** flavor.
 
 ## Architecture of the custom emoji / inline media subsystem
 
-All new code lives in **`app/src/main/java/org/thoughtcrime/securesms/components/emoji/`** (12 new
+All new code lives in **`app/src/main/java/org/thoughtcrime/securesms/components/emoji/`** (13 new
 files). It splits into two cooperating halves.
 
 ### A. Inline media rendering core
@@ -123,11 +127,12 @@ fallback. `loadBytes` resolves `http(s)://` (download), `file://`, and absolute 
 
 | File | Role |
 | --- | --- |
-| `CustomEmojiRegistry.java` | Loads the token→source map from the **imported pack only** (`filesDir/custom_emoji/current/emoji.json`, media under `current/media/`); empty until a pack is imported. Stores names **bare** (no colons) internally and exposes them **colon-wrapped** (`wrap`/`unwrap` at the boundary). Exposes `isCustomToken`, `getSource`, `getTokens`, `getAliases`/`getAliasToken`, `searchTokens` (shared query normalization + matching), `reload`. Thread-safe, lazily loaded. |
+| `CustomEmojiRegistry.java` | Loads the token→source map from the **imported pack only** (`filesDir/custom_emoji/current/emoji.json`, media under `current/media/`); empty until a pack is imported. Stores names **bare** (no colons) internally and exposes them **colon-wrapped** (`wrap`/`unwrap` at the boundary). Exposes `isCustomToken`, `getSource`, `getTokens`, `getAliases`/`getAliasToken`, `getLiterals`/`getLiteralToken`, `searchTokens` (shared query normalization + matching), `reload`. Thread-safe, lazily loaded. |
 | `CustomEmojiPackManager.java` | `importZip(Context, Uri)` — extracts a ZIP to a temp dir (with path-traversal guards), validates `emoji.json` (media resolved under `media/`), atomically rotates it into `current/`, then clears the media cache and reloads the registry. |
 | `CustomEmojiPageModel.java` | An `EmojiPageModel` with key `"Custom"` that backs the dedicated picker tab and the reaction-picker custom block. |
 | `CustomEmojiImageBinder.java` | Binds a custom token into an `ImageView` cell (picker / reaction grid) asynchronously, using the view's content-description/tag as the stable async identity guard. |
 | `CustomEmojiAliasResolver.java` | Swaps a hand-typed completed `:alias:` → its `:token:` in the compose field (picker/autocomplete already insert the token directly). |
+| `CustomEmojiLiteralResolver.java` | Swaps a completed **literal** — a colon-free whole word (e.g. `o7`) that starts at text-start or after whitespace and is finished with a space — → its `:token:` in the compose field, consuming that one triggering space. |
 | `CustomEmojiPackUpdater.java` | "Import from URL": downloads + imports a pack from a URL and tracks a `{"version":…}` endpoint; on app start, re-imports when the version string changes (`checkForUpdate`). |
 
 ## Integration points (modified upstream files)
@@ -145,7 +150,8 @@ fallback. `loadBytes` resolves `http(s)://` (download), `file://`, and absolute 
 - `components/ComposeText.java` — a `TextWatcher` re-runs `inlinify` on edits and replaces the
   editable only when text/inline-span ranges actually changed (`sameTextAndInlineSpans`), preserving
   the selection. The same watcher swaps a completed hand-typed `:alias:` → `:token:`
-  (`CustomEmojiAliasResolver`). `findQueryStart(...)` is patched so a finished token/alias like
+  (`CustomEmojiAliasResolver`) and a completed colon-free **literal** — a whole word finished with a
+  space — → `:token:`, consuming that space (`CustomEmojiLiteralResolver`). `findQueryStart(...)` is patched so a finished token/alias like
   `:aware:` does **not** re-trigger the `:`-autocomplete popup (`isClosingColonOfCustomEmojiToken`,
   which checks tokens and aliases).
 
@@ -172,7 +178,7 @@ fallback. `loadBytes` resolves `http(s)://` (download), `file://`, and absolute 
 - `messages/DataMessageProcessor.kt` — **critical**: accepts incoming reactions that are custom tokens
   (`handleReaction` / `handleStoryReaction`), which upstream would reject via `EmojiUtil.isEmoji`.
 
-**Search** (both delegate to `CustomEmojiRegistry.searchTokens(...)`, which matches by token **or alias**
+**Search** (both delegate to `CustomEmojiRegistry.searchTokens(...)`, which matches by token, **alias or literal**
 and always returns the canonical token)
 - `keyboard/emoji/search/EmojiSearchRepository.kt` — merges custom tokens into picker search results.
 - `conversation/ui/inlinequery/InlineQueryViewModelV2.kt` — merges custom tokens into the
@@ -212,7 +218,7 @@ and always returns the canonical token)
 ## Custom emoji pack format
 
 `emoji.json` (at the ZIP root) is either `{ "emoji": [ … ] }` or a bare array. Each entry needs a
-`token` and a source (precedence `source` → `url` → `file`), plus an optional `aliases` array. **The `token` and each
+`token` and a source (precedence `source` → `url` → `file`), plus optional `aliases` and `literals` arrays. **The `token` and each
 alias are the bare emoji name, without colons** (e.g. `"pepega"`). The name is the emoji's identity; the
 colon-wrapped `:pepega:` form is what gets inserted, sent, matched in message text, and rendered.
 
@@ -224,11 +230,22 @@ the alias in full as `:D::` (the compose field swaps the completed `:D::` → `:
 `token`/alias with surrounding colons (`":pepega:"`) — under this scheme that would become a name that
 literally contains colons.
 
+**Literals** are a second kind of type-in name, for triggers you'd type *without* colons — e.g. `o7`,
+`xdx`, `???`, `:D`, `D:`. In the compose field a literal is recognised only as a whole word: it must
+start at the beginning of the message or right after whitespace (space/tab/newline) and be finished with
+a **space**, which is consumed as the literal is swapped to `:token:` (typing `o7 ` yields `:salute:`; a
+second trailing space is kept, so `o7  ` yields `:salute: `). Because a literal isn't colon-prefixed it
+raises no autocomplete popup while typing — though a literal that itself begins with a colon (`:D`) can
+still transiently open the standard `:` popup, resolving on the space regardless. Literals are also
+searchable (`o7` finds the salute emoji). Like aliases they resolve to the token before send, never reach
+the wire, and must be **globally unique** across every token, alias and literal in the pack.
+
 ```json
 {
   "emoji": [
     { "token": "pepega", "url": "https://cdn.7tv.app/emote/…/2x.webp", "aliases": ["pepe", "sadge"] },
     { "token": "D_",     "url": "https://cdn.7tv.app/emote/…/2x.webp", "aliases": ["D:"] },
+    { "token": "salute", "url": "https://cdn.7tv.app/emote/…/2x.webp", "literals": ["o7"] },
     { "token": "foo",    "file": "catjam.png" }
   ]
 }
@@ -244,6 +261,10 @@ literally contains colons.
   Every token and alias must be **globally unique** across the pack (importer rejects duplicates; loader
   skips them). Resolved to the token before anything is sent, so changing/removing an alias never affects
   already-sent messages.
+- **`literals`** (optional) → colon-free type-in triggers (`CustomEmojiLiteralResolver`): a whole word,
+  typed without colons and completed with a space, swapped to the token in the compose field (the space is
+  consumed). Also **globally unique** across every token / alias / literal, and searchable. Like aliases,
+  resolved to the token before send, so they never reach the wire.
 
 **Location:** the imported pack is the only source — `filesDir/custom_emoji/current/emoji.json` plus its
 `media/` directory. The ZIP is supplied either by picking a local file or by URL download
@@ -282,6 +303,11 @@ pack.zip
   contain a colon (alias `D:` ⇒ stored `D:`, wire form `:D::`). Picker/autocomplete insert the `:token:`
   directly; a hand-typed completed `:alias:` is swapped to `:token:` in the compose field
   (`CustomEmojiAliasResolver`) before it's ever sent, so aliases never reach the wire.
+- **Literals** are the colon-free sibling of aliases: bare whole-word triggers (`o7`, `:D`) swapped to
+  `:token:` in the compose field only when completed with a space (that space is consumed);
+  `CustomEmojiLiteralResolver` runs in the same `ComposeText` watcher as the alias swap. Stored/exposed
+  **verbatim** (not colon-wrapped, since they're typed without colons), globally unique with tokens and
+  aliases, searchable, and resolved to the token before send so they never reach the wire.
 - When the inline-media toggle is **off** (`SignalStore.settings().isInlineUrlMediaEnabled()`, default
   off), **no remote media is fetched on any surface** (message text, compose, picker, reactions,
   autocomplete; the byte cache is bypassed too). Blocked remote `:token:`s render as the U+FFFD glyph

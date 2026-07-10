@@ -201,6 +201,19 @@ public final class CustomEmojiPackManager {
           }
         }
       }
+
+      JSONArray literals = obj.optJSONArray("literals");
+      if (literals != null) {
+        for (int j = 0; j < literals.length(); j++) {
+          String literal = CustomEmojiRegistry.normalizeName(literals.optString(j, null));
+          if (literal == null) {
+            continue;
+          }
+          if (!seenNames.add(literal)) {
+            throw new IllegalArgumentException("Duplicate name (literal): " + literal);
+          }
+        }
+      }
     }
   }
 
