@@ -135,17 +135,28 @@ fi
 
 [[ -d "$BUILD_OUT" ]] || die "Build output dir missing: $BUILD_OUT (did the build run?)"
 
+# ---- read THIS build's version from output-metadata.json --------------------
+# output-metadata.json always describes the outputs of the current build, so it's the source of truth
+# for which version was just built. Selecting the unsigned APK by this exact version (instead of a
+# "*.apk" glob) means a leftover older/newer-version APK sitting in $BUILD_OUT can't be signed by
+# mistake — the bug that let a stale version get published after a version bump was reverted.
+METADATA="$BUILD_OUT/output-metadata.json"
+[[ -f "$METADATA" ]] || die "output-metadata.json not found in $BUILD_OUT (did the build run?)."
+VERSION_NAME="$(sed -nE 's/.*"versionName" *: *"([^"]+)".*/\1/p' "$METADATA" | head -1)"
+[[ -n "$VERSION_NAME" ]] || die "Could not read versionName from $METADATA."
+log "build version: $VERSION_NAME"
+
 # ---- sign each requested ABI into the release dir ---------------------------
 mkdir -p "$RELEASE_DIR"
 RELEASE_DIR="$(cd "$RELEASE_DIR" && pwd)"   # normalize to absolute
 
 signed=()
 for abi in "${ABIS[@]}"; do
-  # the trailing "-release-" anchor stops the x86 glob from also matching x86_64
-  unsigned="$(find "$BUILD_OUT" -maxdepth 1 -type f \
-    -name "Signal-Android-website-prod-${abi}-release-unsigned-*.apk" 2>/dev/null | head -1)"
-  if [[ -z "$unsigned" ]]; then
-    warn "No unsigned APK for ABI '$abi' in $BUILD_OUT — skipping."
+  # Exact filename for THIS build's version — no globbing, so a leftover older-version APK in
+  # $BUILD_OUT can never be picked by mistake.
+  unsigned="$BUILD_OUT/Signal-Android-website-prod-${abi}-release-unsigned-${VERSION_NAME}.apk"
+  if [[ ! -f "$unsigned" ]]; then
+    warn "No unsigned APK for ABI '$abi' at version $VERSION_NAME in $BUILD_OUT — skipping."
     continue
   fi
 
@@ -153,6 +164,12 @@ for abi in "${ABIS[@]}"; do
   out_name="${base/Signal-Android/Signal-Plus}"   # brand it
   out_name="${out_name/-unsigned/}"               # it's signed now
   out="$RELEASE_DIR/$out_name"
+
+  # Drop any previously-signed APK for this ABI (any version) so the release dir only ever holds the
+  # current build. publish-update.sh picks the highest-versioned APK it finds there, so a stale
+  # higher-version leftover (e.g. after reverting a version bump) would otherwise get published instead.
+  # The "-release-" anchor keeps the x86 glob from also matching x86_64.
+  rm -f "$RELEASE_DIR"/Signal-Plus-website-prod-"${abi}"-release-*.apk
 
   log "Signing $abi -> $out_name"
   "$ZIPALIGN" -p -f 4 "$unsigned" "$out"
