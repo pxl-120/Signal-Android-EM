@@ -48,6 +48,11 @@ class AppearanceSettingsViewModel : ViewModel() {
     SignalStore.settings.isCustomEmojiSearchFirst = enabled
   }
 
+  fun setCustomEmojiNamesAsLiterals(enabled: Boolean) {
+    store.update { it.copy(customEmojiNamesAsLiterals = enabled) }
+    SignalStore.settings.isCustomEmojiNamesAsLiterals = enabled
+  }
+
   fun setCustomEmojiImportFromUrl(enabled: Boolean) {
     store.update { it.copy(customEmojiImportFromUrl = enabled) }
     SignalStore.settings.isCustomEmojiImportFromUrl = enabled
@@ -61,6 +66,7 @@ class AppearanceSettingsViewModel : ViewModel() {
       SignalStore.settings.useCompactNavigationBar,
       SignalStore.settings.isInlineUrlMediaEnabled,
       SignalStore.settings.isCustomEmojiSearchFirst,
+      SignalStore.settings.isCustomEmojiNamesAsLiterals,
       SignalStore.settings.isCustomEmojiImportFromUrl,
       SignalStore.settings.customEmojiPackZipUrl,
       SignalStore.settings.customEmojiPackVersionUrl,

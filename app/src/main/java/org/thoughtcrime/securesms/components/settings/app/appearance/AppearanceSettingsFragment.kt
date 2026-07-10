@@ -101,6 +101,10 @@ class AppearanceSettingsFragment : ComposeFragment() {
       viewModel.setCustomEmojiSearchFirst(enabled)
     }
 
+    override fun onCustomEmojiNamesAsLiteralsToggled(enabled: Boolean) {
+      viewModel.setCustomEmojiNamesAsLiterals(enabled)
+    }
+
     override fun onCustomEmojiImportMethodSelected(fromUrl: Boolean) {
       viewModel.setCustomEmojiImportFromUrl(fromUrl)
     }
@@ -174,6 +178,7 @@ interface AppearanceSettingsCallbacks {
   fun onImportCustomEmojiPackClick() = Unit
   fun onInlineUrlMediaToggled(enabled: Boolean) = Unit
   fun onCustomEmojiSearchFirstToggled(enabled: Boolean) = Unit
+  fun onCustomEmojiNamesAsLiteralsToggled(enabled: Boolean) = Unit
   fun onCustomEmojiImportMethodSelected(fromUrl: Boolean) = Unit
   fun onApplyUrlPack(zipUrl: String, versionUrl: String) = Unit
 
@@ -285,6 +290,15 @@ private fun AppearanceSettingsScreen(
       }
 
       item {
+        Rows.ToggleRow(
+          checked = state.customEmojiNamesAsLiterals,
+          text = stringResource(R.string.appearance_settings__custom_emoji_names_as_literals),
+          label = stringResource(R.string.appearance_settings__custom_emoji_names_as_literals_label),
+          onCheckChanged = callbacks::onCustomEmojiNamesAsLiteralsToggled
+        )
+      }
+
+      item {
         Rows.RadioListRow(
           text = stringResource(R.string.appearance_settings__custom_emote_pack_source),
           labels = arrayOf(
@@ -360,6 +374,7 @@ private fun AppearanceSettingsScreenPreview() {
         isCompactNavigationBar = false,
         inlineUrlMediaEnabled = false,
         customEmojiSearchFirst = false,
+        customEmojiNamesAsLiterals = false,
         customEmojiImportFromUrl = false,
         customEmojiPackZipUrl = "",
         customEmojiPackVersionUrl = "",

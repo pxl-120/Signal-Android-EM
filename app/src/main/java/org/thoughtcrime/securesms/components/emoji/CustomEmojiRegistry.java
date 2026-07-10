@@ -10,6 +10,8 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 import org.json.JSONTokener;
 
+import org.thoughtcrime.securesms.keyvalue.SignalStore;
+
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
@@ -82,6 +84,11 @@ public final class CustomEmojiRegistry {
   private static Map<String, String> literalToToken = Collections.emptyMap();  // verbatim literal -> bare token
   private static List<String>        literals       = Collections.emptyList(); // verbatim literals, longest first
 
+  // When the "treat every token/alias as a literal" setting is on, getLiterals returns this instead:
+  // explicit literals plus every token and alias name (longest first). Precomputed once at load; the pack
+  // JSON is never modified. See isCustomEmojiNamesAsLiterals().
+  private static List<String>        literalsWithNames = Collections.emptyList();
+
   private CustomEmojiRegistry() {}
 
   /** Wraps a bare name in its colon form: {@code pepega} -> {@code :pepega:}. */
@@ -134,23 +141,47 @@ public final class CustomEmojiRegistry {
     return token == null ? null : wrap(token);
   }
 
-  /** All registered literals, verbatim (as typed, no wrapping colons), longest first. */
+  /**
+   * Literals to match in the compose field, verbatim (as typed, no wrapping colons), longest first — the
+   * pack's explicit literals, plus (when the "treat every token/alias as a literal" setting is on, see
+   * {@link org.thoughtcrime.securesms.keyvalue.SettingsValues#isCustomEmojiNamesAsLiterals()}) every token
+   * and alias name too, so any emoji can be typed by name without colons.
+   */
   public static @NonNull List<String> getLiterals(@NonNull Context context) {
     ensureLoaded(context);
-    return literals;
+    return namesAsLiteralsEnabled() ? literalsWithNames : literals;
   }
 
   /**
    * The canonical token ({@code :token:} form) for a literal, or null if it isn't a known literal. The
-   * literal is matched verbatim (it carries no wrapping colons), unlike {@link #getAliasToken}.
+   * literal is matched verbatim (it carries no wrapping colons), unlike {@link #getAliasToken}. When the
+   * "treat every token/alias as a literal" setting is on, a token or alias name also resolves here (to its
+   * own token) so it can be typed without colons; an explicit literal registered in the pack still wins.
    */
   public static @Nullable String getLiteralToken(@NonNull Context context, @Nullable CharSequence literal) {
     ensureLoaded(context);
     if (literal == null) {
       return null;
     }
-    String token = literalToToken.get(literal.toString());
-    return token == null ? null : wrap(token);
+    String key   = literal.toString();
+    String token = literalToToken.get(key);
+    if (token != null) {
+      return wrap(token);
+    }
+    if (namesAsLiteralsEnabled()) {
+      if (tokenToSource.containsKey(key)) {
+        return wrap(key);
+      }
+      String aliasToken = aliasToToken.get(key);
+      if (aliasToken != null) {
+        return wrap(aliasToken);
+      }
+    }
+    return null;
+  }
+
+  private static boolean namesAsLiteralsEnabled() {
+    return SignalStore.settings().isCustomEmojiNamesAsLiterals();
   }
 
   /**
@@ -194,13 +225,14 @@ public final class CustomEmojiRegistry {
 
   public static void reload() {
     synchronized (LOCK) {
-      loaded         = false;
-      tokenToSource  = Collections.emptyMap();
-      aliasToToken   = Collections.emptyMap();
-      literalToToken = Collections.emptyMap();
-      wrappedTokens  = Collections.emptyList();
-      wrappedAliases = Collections.emptyList();
-      literals       = Collections.emptyList();
+      loaded            = false;
+      tokenToSource     = Collections.emptyMap();
+      aliasToToken      = Collections.emptyMap();
+      literalToToken    = Collections.emptyMap();
+      wrappedTokens     = Collections.emptyList();
+      wrappedAliases    = Collections.emptyList();
+      literals          = Collections.emptyList();
+      literalsWithNames = Collections.emptyList();
     }
   }
 
@@ -249,13 +281,23 @@ public final class CustomEmojiRegistry {
       List<String> sortedLiterals = new ArrayList<>(literalMap.keySet());
       sortedLiterals.sort(Comparator.comparingInt(String::length).reversed());
 
-      tokenToSource  = Collections.unmodifiableMap(sourceMap);
-      aliasToToken   = Collections.unmodifiableMap(aliasMap);
-      literalToToken = Collections.unmodifiableMap(literalMap);
-      wrappedTokens  = Collections.unmodifiableList(sortedTokens);
-      wrappedAliases = Collections.unmodifiableList(sortedAliases);
-      literals       = Collections.unmodifiableList(sortedLiterals);
-      loaded         = true;
+      // Union used when the "treat every token/alias as a literal" setting is on: explicit literals plus
+      // every token and alias name. The LinkedHashSet drops overlaps (an explicit literal that already
+      // equals a token/alias of its own emoji); they resolve to the same emoji regardless.
+      Set<String> namesAndLiterals = new LinkedHashSet<>(literalMap.keySet());
+      namesAndLiterals.addAll(sourceMap.keySet());
+      namesAndLiterals.addAll(aliasMap.keySet());
+      List<String> sortedLiteralsWithNames = new ArrayList<>(namesAndLiterals);
+      sortedLiteralsWithNames.sort(Comparator.comparingInt(String::length).reversed());
+
+      tokenToSource     = Collections.unmodifiableMap(sourceMap);
+      aliasToToken      = Collections.unmodifiableMap(aliasMap);
+      literalToToken    = Collections.unmodifiableMap(literalMap);
+      wrappedTokens     = Collections.unmodifiableList(sortedTokens);
+      wrappedAliases    = Collections.unmodifiableList(sortedAliases);
+      literals          = Collections.unmodifiableList(sortedLiterals);
+      literalsWithNames = Collections.unmodifiableList(sortedLiteralsWithNames);
+      loaded            = true;
     }
   }
 

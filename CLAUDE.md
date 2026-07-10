@@ -193,7 +193,8 @@ and always returns the canonical token)
 - `components/settings/app/appearance/AppearanceSettingsFragment.kt` (+ `AppearanceSettingsState.kt` /
   `AppearanceSettingsViewModel.kt`) — the section header, the **"Render link images & GIFs inline"**
   `ToggleRow` (privacy opt-in), the **"Show custom emoji first in search"** `ToggleRow` (search-ordering
-  opt-in, default off), and a **pack source** `RadioListRow` (Local file / From URL):
+  opt-in, default off), the **"Type custom emoji without colons"** `ToggleRow` (treat every token/alias as
+  a literal, default off), and a **pack source** `RadioListRow` (Local file / From URL):
   - *Local file* → "Import custom emote pack" `TextRow` → `OpenDocument()` →
     `CustomEmojiPackManager.importZip(uri)` (background thread).
   - *From URL* → two `TextFields` (pack `.zip` URL, version URL) + "Download & apply" →
@@ -204,6 +205,11 @@ and always returns the canonical token)
   (picker / reactions / autocomplete popup), and `ConversationItem` (link-preview suppression).
   Search-ordering toggle: `isCustomEmojiSearchFirst()` / `setCustomEmojiSearchFirst(...)`, key
   `settings.signalplus.customEmoji.searchFirst`, **default off** (see *Search* above).
+  Names-as-literals toggle: `isCustomEmojiNamesAsLiterals()` / `setCustomEmojiNamesAsLiterals(...)`, key
+  `settings.signalplus.customEmoji.namesAsLiterals`, **default off** — when on, `CustomEmojiRegistry`
+  treats every token and alias as a literal too (a precomputed union list; the pack JSON is never
+  modified), so any emoji can be typed by name without colons; read via `getLiterals` / `getLiteralToken`
+  at compose time.
   URL-import config: `isCustomEmojiImportFromUrl`, `customEmojiPackZipUrl`, `customEmojiPackVersionUrl`,
   `customEmojiPackVersion`, `customEmojiPackLastCheck`, `customEmojiPackLastUpdate`
   (`settings.signalplus.customEmoji.*`).
@@ -311,7 +317,10 @@ pack.zip
   `CustomEmojiLiteralResolver` runs in the same `ComposeText` watcher as the alias swap. Stored/exposed
   **verbatim** (not colon-wrapped, since they're typed without colons); unique among literals and disjoint
   from *other* emojis' tokens/aliases, though a literal may equal its **own** emoji's token/alias;
-  searchable; resolved to the token before send so they never reach the wire.
+  searchable; resolved to the token before send so they never reach the wire. The Appearance **"Type
+  custom emoji without colons"** toggle (default off, `isCustomEmojiNamesAsLiterals()`) additionally makes
+  every token and alias act as a literal at runtime — `CustomEmojiRegistry` returns a precomputed union
+  from `getLiterals`/`getLiteralToken`; the pack JSON is untouched.
 - When the inline-media toggle is **off** (`SignalStore.settings().isInlineUrlMediaEnabled()`, default
   off), **no remote media is fetched on any surface** (message text, compose, picker, reactions,
   autocomplete; the byte cache is bypassed too). Blocked remote `:token:`s render as the U+FFFD glyph

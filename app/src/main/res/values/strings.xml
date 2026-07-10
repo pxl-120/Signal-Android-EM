@@ -15,6 +15,8 @@
 <string name="appearance_settings__render_inline_url_media_warning">When on, media linked in a message as :url: is downloaded and shown inline. This contacts third-party servers directly on render and can leak your IP address, weakening some of Signal\'s privacy protections. Off by default.</string>
 <string name="appearance_settings__show_custom_emoji_first">Show custom emoji first in search</string>
 <string name="appearance_settings__show_custom_emoji_first_label">When on, matching custom emoji are listed before standard emoji in the :emoji: autocomplete and emoji search. Off by default.</string>
+<string name="appearance_settings__custom_emoji_names_as_literals">Type custom emoji without colons</string>
+<string name="appearance_settings__custom_emoji_names_as_literals_label">When on, every custom emoji\'s token and aliases also act as literals: type the name followed by a space and it turns into the emoji, no colons needed. Explicit literals in the pack keep working. Off by default.</string>
 <string name="appearance_settings__custom_emote_pack_source">Custom emote pack source</string>
 <string name="appearance_settings__import_from_local_file">Local file</string>
 <string name="appearance_settings__import_from_url">From URL</string>

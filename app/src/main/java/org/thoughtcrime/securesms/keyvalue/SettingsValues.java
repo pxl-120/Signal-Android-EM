@@ -71,6 +71,7 @@ public final class SettingsValues extends SignalStoreValues {
   private static final String USE_COMPACT_NAVIGATION_BAR              = "settings.useCompactNavigationBar";
   private static final String INLINE_URL_MEDIA_ENABLED                = "settings.signalplus.inlineUrlMediaEnabled";
   private static final String CUSTOM_EMOJI_SEARCH_FIRST               = "settings.signalplus.customEmoji.searchFirst";
+  private static final String CUSTOM_EMOJI_NAMES_AS_LITERALS          = "settings.signalplus.customEmoji.namesAsLiterals";
   private static final String CUSTOM_EMOJI_IMPORT_FROM_URL            = "settings.signalplus.customEmoji.importFromUrl";
   private static final String CUSTOM_EMOJI_PACK_ZIP_URL               = "settings.signalplus.customEmoji.packZipUrl";
   private static final String CUSTOM_EMOJI_PACK_VERSION_URL           = "settings.signalplus.customEmoji.packVersionUrl";
@@ -158,6 +159,7 @@ public final class SettingsValues extends SignalStoreValues {
                          USE_COMPACT_NAVIGATION_BAR,
                          INLINE_URL_MEDIA_ENABLED,
                          CUSTOM_EMOJI_SEARCH_FIRST,
+                         CUSTOM_EMOJI_NAMES_AS_LITERALS,
                          CUSTOM_EMOJI_IMPORT_FROM_URL,
                          CUSTOM_EMOJI_PACK_ZIP_URL,
                          CUSTOM_EMOJI_PACK_VERSION_URL,
@@ -549,6 +551,14 @@ public final class SettingsValues extends SignalStoreValues {
 
   public boolean isCustomEmojiSearchFirst() {
     return getBoolean(CUSTOM_EMOJI_SEARCH_FIRST, false);
+  }
+
+  public void setCustomEmojiNamesAsLiterals(boolean enabled) {
+    putBoolean(CUSTOM_EMOJI_NAMES_AS_LITERALS, enabled);
+  }
+
+  public boolean isCustomEmojiNamesAsLiterals() {
+    return getBoolean(CUSTOM_EMOJI_NAMES_AS_LITERALS, false);
   }
 
   public void setCustomEmojiImportFromUrl(boolean enabled) {

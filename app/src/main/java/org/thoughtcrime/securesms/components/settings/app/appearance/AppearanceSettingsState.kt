@@ -9,6 +9,7 @@ data class AppearanceSettingsState(
   val isCompactNavigationBar: Boolean,
   val inlineUrlMediaEnabled: Boolean,
   val customEmojiSearchFirst: Boolean,
+  val customEmojiNamesAsLiterals: Boolean,
   val customEmojiImportFromUrl: Boolean,
   val customEmojiPackZipUrl: String,
   val customEmojiPackVersionUrl: String,
