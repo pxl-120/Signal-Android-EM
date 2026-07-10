@@ -53,10 +53,11 @@ import java.util.Set;
  * <p>Token and alias names are stored <b>bare</b> (without the wrapping colons); the methods that expose
  * them speak the colon-wrapped {@code :name:} form — the form that lives in message text — so the
  * wrapping is applied/stripped at this boundary only ({@link #wrap} / {@link #unwrap}). Literals are the
- * exception: because they are typed without colons, they are stored and exposed verbatim. Every token,
- * alias and literal is globally unique across the whole pack, so a name resolves to exactly one emoji.
- * Rendering ({@link CustomEmojiParser}, {@link #isCustomToken}, {@link #getSource}) operates on tokens
- * only; aliases and literals live in separate maps.
+ * exception: because they are typed without colons, they are stored and exposed verbatim. Tokens and
+ * aliases are globally unique across the whole pack; a literal is unique among all literals and may
+ * coincide with a token or alias only of its <i>own</i> emoji (never a different one), so every name
+ * still resolves to exactly one emoji. Rendering ({@link CustomEmojiParser}, {@link #isCustomToken},
+ * {@link #getSource}) operates on tokens only; aliases and literals live in separate maps.
  */
 public final class CustomEmojiRegistry {
 
@@ -290,8 +291,13 @@ public final class CustomEmojiRegistry {
       return;
     }
 
-    // Enforces global uniqueness of every token, alias and literal (bare names) across the whole pack.
-    Set<String> usedNames = new HashSet<>();
+    // Tokens and aliases share one global namespace (each unique across both). Literals are checked
+    // separately after the loop: unique among all literals, and allowed to coincide with a token/alias
+    // only of the same emoji. A literal may collide with a token/alias defined on a later emoji, so the
+    // literal checks are deferred until every token/alias owner is known.
+    Set<String>         tokenAliasNames = new HashSet<>();   // token + alias names
+    Map<String, String> nameToOwner     = new HashMap<>();   // token/alias name -> owning token
+    List<String[]>      literalEntries  = new ArrayList<>(); // [literal, owning token], checked after the loop
 
     for (int i = 0; i < emoji.length(); i++) {
       JSONObject obj = emoji.optJSONObject(i);
@@ -315,11 +321,12 @@ public final class CustomEmojiRegistry {
         continue;
       }
 
-      if (!usedNames.add(token)) {
+      if (!tokenAliasNames.add(token)) {
         Log.w(TAG, "Skipping duplicate name (token): " + token);
         continue;
       }
 
+      nameToOwner.put(token, token);
       sourceMap.put(token, source);
 
       JSONArray aliasArray = obj.optJSONArray("aliases");
@@ -329,10 +336,11 @@ public final class CustomEmojiRegistry {
           if (alias == null) {
             continue;
           }
-          if (!usedNames.add(alias)) {
+          if (!tokenAliasNames.add(alias)) {
             Log.w(TAG, "Skipping duplicate name (alias): " + alias);
             continue;
           }
+          nameToOwner.put(alias, token);
           aliasMap.put(alias, token);
         }
       }
@@ -344,13 +352,27 @@ public final class CustomEmojiRegistry {
           if (literal == null) {
             continue;
           }
-          if (!usedNames.add(literal)) {
-            Log.w(TAG, "Skipping duplicate name (literal): " + literal);
-            continue;
-          }
-          literalMap.put(literal, token);
+          literalEntries.add(new String[] { literal, token });
         }
       }
+    }
+
+    // A literal must be unique among all literals, and may equal a token/alias only of its own emoji
+    // (never one owned by a different emoji), so it always resolves to the same emoji as that name.
+    Set<String> usedLiterals = new HashSet<>();
+    for (String[] entry : literalEntries) {
+      String literal = entry[0];
+      String owner   = entry[1];
+      if (!usedLiterals.add(literal)) {
+        Log.w(TAG, "Skipping duplicate literal: " + literal);
+        continue;
+      }
+      String nameOwner = nameToOwner.get(literal);
+      if (nameOwner != null && !nameOwner.equals(owner)) {
+        Log.w(TAG, "Skipping literal that matches another emoji's token/alias: " + literal);
+        continue;
+      }
+      literalMap.put(literal, owner);
     }
   }
 

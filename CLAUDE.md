@@ -237,8 +237,10 @@ a **space**, which is consumed as the literal is swapped to `:token:` (typing `o
 second trailing space is kept, so `o7  ` yields `:salute: `). Because a literal isn't colon-prefixed it
 raises no autocomplete popup while typing — though a literal that itself begins with a colon (`:D`) can
 still transiently open the standard `:` popup, resolving on the space regardless. Literals are also
-searchable (`o7` finds the salute emoji). Like aliases they resolve to the token before send, never reach
-the wire, and must be **globally unique** across every token, alias and literal in the pack.
+searchable (`o7` finds the salute emoji). Like aliases they resolve to the token before send and never
+reach the wire. A literal is **unique among all literals** and can't reuse a *different* emoji's token or
+alias, but it **may** equal its own emoji's token or an alias — e.g. an emoji with token `o7` and literal
+`o7`: `:o7:` renders it, and typing `o7 ` inserts `:o7:` (both resolve to the same emoji).
 
 ```json
 {
@@ -263,8 +265,9 @@ the wire, and must be **globally unique** across every token, alias and literal 
   already-sent messages.
 - **`literals`** (optional) → colon-free type-in triggers (`CustomEmojiLiteralResolver`): a whole word,
   typed without colons and completed with a space, swapped to the token in the compose field (the space is
-  consumed). Also **globally unique** across every token / alias / literal, and searchable. Like aliases,
-  resolved to the token before send, so they never reach the wire.
+  consumed). **Unique among all literals** and never equal to a *different* emoji's token/alias, but a
+  literal **may** match its own emoji's token or alias; searchable; resolved to the token before send, so
+  they never reach the wire.
 
 **Location:** the imported pack is the only source — `filesDir/custom_emoji/current/emoji.json` plus its
 `media/` directory. The ZIP is supplied either by picking a local file or by URL download
@@ -306,8 +309,9 @@ pack.zip
 - **Literals** are the colon-free sibling of aliases: bare whole-word triggers (`o7`, `:D`) swapped to
   `:token:` in the compose field only when completed with a space (that space is consumed);
   `CustomEmojiLiteralResolver` runs in the same `ComposeText` watcher as the alias swap. Stored/exposed
-  **verbatim** (not colon-wrapped, since they're typed without colons), globally unique with tokens and
-  aliases, searchable, and resolved to the token before send so they never reach the wire.
+  **verbatim** (not colon-wrapped, since they're typed without colons); unique among literals and disjoint
+  from *other* emojis' tokens/aliases, though a literal may equal its **own** emoji's token/alias;
+  searchable; resolved to the token before send so they never reach the wire.
 - When the inline-media toggle is **off** (`SignalStore.settings().isInlineUrlMediaEnabled()`, default
   off), **no remote media is fetched on any surface** (message text, compose, picker, reactions,
   autocomplete; the byte cache is bypassed too). Blocked remote `:token:`s render as the U+FFFD glyph

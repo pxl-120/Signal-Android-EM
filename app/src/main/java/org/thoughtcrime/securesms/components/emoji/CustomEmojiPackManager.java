@@ -15,7 +15,11 @@ import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
@@ -148,7 +152,11 @@ public final class CustomEmojiPackManager {
       throw new IllegalArgumentException("No emoji array in " + CONFIG_NAME);
     }
 
-    Set<String> seenNames = new HashSet<>();
+    // Tokens and aliases share one global namespace; literals are checked after the loop (a literal may
+    // collide with a token/alias defined on a later emoji, and may match a token/alias only of its own emoji).
+    Set<String>         tokenAliasNames = new HashSet<>();   // token + alias names
+    Map<String, String> nameToOwner     = new HashMap<>();   // token/alias name -> owning token
+    List<String[]>      literalEntries  = new ArrayList<>(); // [literal, owning token], checked after the loop
     File baseDir = configFile.getParentFile();
 
     for (int i = 0; i < emoji.length(); i++) {
@@ -166,9 +174,10 @@ public final class CustomEmojiPackManager {
         throw new IllegalArgumentException("Entry " + i + " has no token");
       }
 
-      if (!seenNames.add(token)) {
+      if (!tokenAliasNames.add(token)) {
         throw new IllegalArgumentException("Duplicate name: " + token);
       }
+      nameToOwner.put(token, token);
 
       String effectiveFile = file;
       if (effectiveFile == null && source != null &&
@@ -196,9 +205,10 @@ public final class CustomEmojiPackManager {
           if (alias == null) {
             continue;
           }
-          if (!seenNames.add(alias)) {
+          if (!tokenAliasNames.add(alias)) {
             throw new IllegalArgumentException("Duplicate name (alias): " + alias);
           }
+          nameToOwner.put(alias, token);
         }
       }
 
@@ -209,10 +219,23 @@ public final class CustomEmojiPackManager {
           if (literal == null) {
             continue;
           }
-          if (!seenNames.add(literal)) {
-            throw new IllegalArgumentException("Duplicate name (literal): " + literal);
-          }
+          literalEntries.add(new String[] { literal, token });
         }
+      }
+    }
+
+    // A literal must be unique among all literals, and may equal a token/alias only of its own emoji
+    // (never one owned by a different emoji).
+    Set<String> seenLiterals = new HashSet<>();
+    for (String[] entry : literalEntries) {
+      String literal = entry[0];
+      String owner   = entry[1];
+      if (!seenLiterals.add(literal)) {
+        throw new IllegalArgumentException("Duplicate literal: " + literal);
+      }
+      String nameOwner = nameToOwner.get(literal);
+      if (nameOwner != null && !nameOwner.equals(owner)) {
+        throw new IllegalArgumentException("Literal also used as another emoji's token/alias: " + literal);
       }
     }
   }
