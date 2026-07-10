@@ -135,24 +135,24 @@ public final class CustomEmojiPackManager {
     String json = readAllText(new FileInputStream(configFile));
     Object parsed = new JSONTokener(json).nextValue();
 
-    JSONArray emotes;
+    JSONArray emoji;
     if (parsed instanceof JSONObject) {
-      emotes = ((JSONObject) parsed).optJSONArray("emotes");
+      emoji = ((JSONObject) parsed).optJSONArray("emoji");
     } else if (parsed instanceof JSONArray) {
-      emotes = (JSONArray) parsed;
+      emoji = (JSONArray) parsed;
     } else {
-      emotes = null;
+      emoji = null;
     }
 
-    if (emotes == null) {
-      throw new IllegalArgumentException("No emotes array in " + CONFIG_NAME);
+    if (emoji == null) {
+      throw new IllegalArgumentException("No emoji array in " + CONFIG_NAME);
     }
 
     Set<String> seenNames = new HashSet<>();
     File baseDir = configFile.getParentFile();
 
-    for (int i = 0; i < emotes.length(); i++) {
-      JSONObject obj = emotes.optJSONObject(i);
+    for (int i = 0; i < emoji.length(); i++) {
+      JSONObject obj = emoji.optJSONObject(i);
       if (obj == null) {
         continue;
       }

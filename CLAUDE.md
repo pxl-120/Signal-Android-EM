@@ -211,7 +211,7 @@ and always returns the canonical token)
 
 ## Custom emoji pack format
 
-`emoji.json` (at the ZIP root) is either `{ "emotes": [ … ] }` or a bare array. Each entry needs a
+`emoji.json` (at the ZIP root) is either `{ "emoji": [ … ] }` or a bare array. Each entry needs a
 `token` and a source (precedence `source` → `url` → `file`), plus an optional `aliases` array. **The `token` and each
 alias are the bare emoji name, without colons** (e.g. `"pepega"`). The name is the emoji's identity; the
 colon-wrapped `:pepega:` form is what gets inserted, sent, matched in message text, and rendered.
@@ -226,7 +226,7 @@ literally contains colons.
 
 ```json
 {
-  "emotes": [
+  "emoji": [
     { "token": "pepega", "url": "https://cdn.7tv.app/emote/…/2x.webp", "aliases": ["pepe", "sadge"] },
     { "token": "D_",     "url": "https://cdn.7tv.app/emote/…/2x.webp", "aliases": ["D:"] },
     { "token": "foo",    "file": "catjam.png" }

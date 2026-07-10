@@ -233,25 +233,25 @@ public final class CustomEmojiRegistry {
     String json   = readAllText(in);
     Object parsed = new JSONTokener(json).nextValue();
 
-    JSONArray emotes;
+    JSONArray emoji;
     if (parsed instanceof JSONObject) {
-      emotes = ((JSONObject) parsed).optJSONArray("emotes");
+      emoji = ((JSONObject) parsed).optJSONArray("emoji");
     } else if (parsed instanceof JSONArray) {
-      emotes = (JSONArray) parsed;
+      emoji = (JSONArray) parsed;
     } else {
-      emotes = null;
+      emoji = null;
     }
 
-    if (emotes == null) {
-      Log.w(TAG, "No emotes array found");
+    if (emoji == null) {
+      Log.w(TAG, "No emoji array found");
       return;
     }
 
     // Enforces global uniqueness of every token and alias (bare names) across the whole pack.
     Set<String> usedNames = new HashSet<>();
 
-    for (int i = 0; i < emotes.length(); i++) {
-      JSONObject obj = emotes.optJSONObject(i);
+    for (int i = 0; i < emoji.length(); i++) {
+      JSONObject obj = emoji.optJSONObject(i);
       if (obj == null) {
         continue;
       }
