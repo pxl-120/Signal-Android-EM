@@ -26,8 +26,9 @@ Signal:
 - **Searchable custom emoji (with aliases)** — custom emoji are found in the `:`-autocomplete popup and
   the picker search by their token *or* any alias; selecting or typing an alias resolves to the token.
 - **Literal (colon-free) triggers** — an emoji can also declare **literals**: bare words typed *without*
-  colons (e.g. `o7`, `:D`) that, once written as a whole whitespace-delimited word and completed with a
-  space, are swapped to the emoji's `:token:` in the compose field (the triggering space is consumed).
+  colons (e.g. `o7`, `:D`) that, once written as a whole word (after text-start, whitespace, or a colon)
+  and completed with a space, are swapped to the emoji's `:token:` in the compose field (the triggering
+  space is consumed).
   Like aliases they're search / type-in only and never sent, and they raise no autocomplete popup.
 
 The fork is branded **"Signal+"** and installs side-by-side with official Signal (see *Build &
@@ -132,7 +133,7 @@ fallback. `loadBytes` resolves `http(s)://` (download), `file://`, and absolute 
 | `CustomEmojiPageModel.java` | An `EmojiPageModel` with key `"Custom"` that backs the dedicated picker tab and the reaction-picker custom block. |
 | `CustomEmojiImageBinder.java` | Binds a custom token into an `ImageView` cell (picker / reaction grid) asynchronously, using the view's content-description/tag as the stable async identity guard. |
 | `CustomEmojiAliasResolver.java` | Swaps a hand-typed completed `:alias:` → its `:token:` in the compose field (picker/autocomplete already insert the token directly). |
-| `CustomEmojiLiteralResolver.java` | Swaps a completed **literal** — a colon-free whole word (e.g. `o7`) that starts at text-start or after whitespace and is finished with a space — → its `:token:` in the compose field, consuming that one triggering space. |
+| `CustomEmojiLiteralResolver.java` | Swaps a completed **literal** — a colon-free whole word (e.g. `o7`) that starts at text-start, after whitespace, or right after a colon (so it can follow a `:token:`) and is finished with a space — → its `:token:` in the compose field, consuming that one triggering space. |
 | `CustomEmojiPackUpdater.java` | "Import from URL": downloads + imports a pack from a URL and tracks a `{"version":…}` endpoint; on app start, re-imports when the version string changes (`checkForUpdate`). |
 
 ## Integration points (modified upstream files)
@@ -238,7 +239,8 @@ literally contains colons.
 
 **Literals** are a second kind of type-in name, for triggers you'd type *without* colons — e.g. `o7`,
 `xdx`, `???`, `:D`, `D:`. In the compose field a literal is recognised only as a whole word: it must
-start at the beginning of the message or right after whitespace (space/tab/newline) and be finished with
+start at the beginning of the message, right after whitespace (space/tab/newline), or right after a colon
+(so it can be typed straight after a `:token:`), and be finished with
 a **space**, which is consumed as the literal is swapped to `:token:` (typing `o7 ` yields `:salute:`; a
 second trailing space is kept, so `o7  ` yields `:salute: `). Because a literal isn't colon-prefixed it
 raises no autocomplete popup while typing — though a literal that itself begins with a colon (`:D`) can

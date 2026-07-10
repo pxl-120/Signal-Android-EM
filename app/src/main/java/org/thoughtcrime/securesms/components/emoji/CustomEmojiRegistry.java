@@ -48,8 +48,9 @@ import java.util.Set;
  *       first.</li>
  *   <li>zero or more optional <b>literals</b> — like aliases, alternative names used <i>only</i> for
  *       search and type-in that never render and are never sent, but typed with <b>no</b> surrounding
- *       colons (e.g. {@code o7}, {@code :D}). A literal is recognised in the compose field only as a
- *       whole whitespace-delimited word completed by a space (see {@link CustomEmojiLiteralResolver}).</li>
+ *       colons (e.g. {@code o7}, {@code :D}). A literal is recognised in the compose field only as a whole
+ *       word — bounded on the left by text start, whitespace, or a colon — completed by a space (see
+ *       {@link CustomEmojiLiteralResolver}).</li>
  * </ul>
  *
  * <p>Token and alias names are stored <b>bare</b> (without the wrapping colons); the methods that expose

@@ -14,15 +14,16 @@ import java.util.List;
 /**
  * Converts a custom-emoji <b>literal</b> typed in a compose field into the emoji's canonical token, in
  * place. Literals are the colon-free counterpart of aliases: instead of being typed wrapped in colons
- * (e.g. {@code :smile:}), a literal is typed as a bare, whitespace-delimited word (e.g. {@code o7},
- * {@code :D}) and is recognised only once it is <b>completed with a space</b>.
+ * (e.g. {@code :smile:}), a literal is typed as a bare word (e.g. {@code o7}, {@code :D}) and is
+ * recognised only once it is <b>completed with a space</b>.
  *
  * <p>A literal matches when it is a whole single word — its first character sits at the start of the
- * text or right after whitespace (a space, tab or newline), and it is immediately followed by a space.
- * That one triggering space is consumed as part of the swap: {@code "o7 "} becomes {@code ":salute:"}
- * (no trailing space). If more than one space follows, only the first is consumed, so {@code "o7  "}
- * becomes {@code ":salute: "}. Because a literal never starts a {@code :}-query, typing one shows no
- * autocomplete popup.
+ * text, right after whitespace (a space, tab or newline), or right after a colon (so a literal can be
+ * typed straight after a {@code :token:}), and it is immediately followed by a space. That one triggering
+ * space is consumed as part of the swap: {@code "o7 "} becomes {@code ":salute:"} (no trailing space). If
+ * more than one space follows, only the first is consumed, so {@code "o7  "} becomes {@code ":salute: "}.
+ * A bare literal starts no {@code :}-query, so no autocomplete popup appears; one typed right after a
+ * colon may briefly surface the standard popup, but still resolves on the space.
  *
  * <p>Like aliases, literals are a search / type-in convenience only; the token is the sole identity that
  * is rendered and sent. Swapping here means a sent message body always contains tokens, never literals —
@@ -94,7 +95,10 @@ public final class CustomEmojiLiteralResolver {
         }
 
         int     after   = idx + literal.length();
-        boolean leftOk  = idx == 0 || Character.isWhitespace(value.charAt(idx - 1));
+        // A literal begins a fresh word: at text-start, after whitespace, or right after a ':' (the last
+        // so it can be typed straight after a :token:, which ends in a colon). Completion is still a space.
+        char    before  = idx > 0 ? value.charAt(idx - 1) : ' ';
+        boolean leftOk  = Character.isWhitespace(before) || before == ':';
         boolean rightOk = after < value.length() && value.charAt(after) == ' ';
 
         if (leftOk && rightOk) {
