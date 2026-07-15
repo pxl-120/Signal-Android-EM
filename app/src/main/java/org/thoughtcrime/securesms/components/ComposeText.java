@@ -63,6 +63,7 @@ import android.text.TextWatcher;
 import org.thoughtcrime.securesms.components.emoji.CustomEmojiAliasResolver;
 import org.thoughtcrime.securesms.components.emoji.CustomEmojiLiteralResolver;
 import org.thoughtcrime.securesms.components.emoji.CustomEmojiRegistry;
+import org.thoughtcrime.securesms.components.emoji.InlineMediaDeleter;
 import org.thoughtcrime.securesms.components.emoji.InlineMediaProvider;
 import org.thoughtcrime.securesms.components.emoji.InlineMediaSpan;
 
@@ -479,6 +480,9 @@ public class ComposeText extends EmojiEditText {
       public void onDestroyActionMode(ActionMode mode) {}
     });
 
+    // Delete a whole :token: / :url: chip in one backspace (mirrors MentionDeleter). Registered
+    // before inlineMediaWatcher so the chip is gone before the re-inlinify pass re-renders the text.
+    addTextChangedListener(new InlineMediaDeleter());
     addTextChangedListener(inlineMediaWatcher);
   }
 
