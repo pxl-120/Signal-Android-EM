@@ -91,7 +91,7 @@ changes above are on the **website** flavor.
 
 ## Architecture of the custom emoji / inline media subsystem
 
-All new code lives in **`app/src/main/java/org/thoughtcrime/securesms/components/emoji/`** (13 new
+All new code lives in **`app/src/main/java/org/thoughtcrime/securesms/components/emoji/`** (14 new
 files). It splits into two cooperating halves.
 
 ### A. Inline media rendering core
@@ -104,6 +104,7 @@ files). It splits into two cooperating halves.
 | `InlineMediaDrawable.java` | A `Drawable`+`Animatable` wrapper that lets a span be attached **immediately** (as a 0-size placeholder) and have its real drawable swapped in **later, in place**, once the bytes load. |
 | `InlineMediaSpan.java` | An `AnimatingImageSpan` that sizes/aligns the wrapped drawable to the line (scaled to `1.6×` line height) without disturbing surrounding text metrics. |
 | `ReplacementCharDrawable.java` | Draws the U+FFFD glyph (`�`), shown in place of remote media that the privacy toggle blocks from loading (see *pack format* / *caveats*). |
+| `InlineMediaDeleter.java` | A compose-field `TextWatcher` (modeled on upstream `MentionDeleter`) that deletes a **whole `:token:` / `:url:` chip in one backspace** when a deletion lands inside its `InlineMediaSpan`, instead of nibbling one char at a time. Fixes older-Android where a backspace only *shrinks* the `ReplacementSpan` (leaving a half-token that keeps rendering as an image and can leak a stale span into a retyped token); a no-op on Android versions that already delete the span atomically. |
 
 **Rendering data flow (`inlinify`):**
 
@@ -154,7 +155,10 @@ fallback. `loadBytes` resolves `http(s)://` (download), `file://`, and absolute 
   (`CustomEmojiAliasResolver`) and a completed colon-free **literal** — a whole word finished with a
   space — → `:token:`, consuming that space (`CustomEmojiLiteralResolver`). `findQueryStart(...)` is patched so a finished token/alias like
   `:aware:` does **not** re-trigger the `:`-autocomplete popup (`isClosingColonOfCustomEmojiToken`,
-  which checks tokens and aliases).
+  which checks tokens and aliases). A separate `InlineMediaDeleter` watcher (registered just before the
+  inline-media watcher) makes a backspace **into** a rendered chip delete the whole `:token:` / `:url:`
+  at once — this is what upstream Android ≥16 already does for a `ReplacementSpan`, but older releases
+  only shrink the span and fail to re-layout, so without it a partial `:to` keeps rendering as an image.
 
 **Emoji picker**
 - `components/emoji/EmojiImageView.java` — `setImageEmoji` routes custom tokens to
@@ -357,7 +361,8 @@ tools/                                       # build & helper scripts + release 
 app/build.gradle.kts                         # website flavor: .mod suffix, updater off
 app/src/website/res/                         # "Signal+" name + launcher icon
 app/src/main/java/.../components/emoji/
-  InlineMediaParser/Drawable/Span/Provider   # inline media rendering core
+  InlineMediaParser/Drawable/Span/Provider/
+  Deleter                                    # inline media rendering core
   CustomEmojiRegistry/Parser/PackManager/
   PageModel/ImageBinder                      # custom emoji pack + registry
 app/src/main/java/.../components/ComposeText.java          # compose live preview + popup suppression
