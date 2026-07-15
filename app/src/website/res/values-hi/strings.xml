@@ -1,0 +1,8 @@
+<resources>
+  <!--
+    Upstream ships app_name (translatable="false") still active in values-af/hi/pt, unlike the other
+    ~65 locale files where excludeNonTranslatables comments it out. That leaked "Signal" would win
+    over the website flavor's default-locale "Signal+" on Hindi devices, so re-assert it here.
+  -->
+  <string name="app_name" translatable="false">Signal+</string>
+</resources>
