@@ -150,6 +150,13 @@ log "build version: $VERSION_NAME"
 mkdir -p "$RELEASE_DIR"
 RELEASE_DIR="$(cd "$RELEASE_DIR" && pwd)"   # normalize to absolute
 
+# Each APK is aligned + signed under a hidden ".partial-" name (which publish-update.sh's
+# "Signal-Plus-…" glob can't match) and only moved into place once it verifies. A failed or aborted
+# signing — e.g. a password prompt with no stdin — must never leave an unsigned APK under the release
+# name, where publish-update.sh would ship it. This trap removes the in-progress file on any exit.
+partial=""
+trap '[[ -n "$partial" ]] && rm -f "$partial"' EXIT
+
 signed=()
 for abi in "${ABIS[@]}"; do
   # Exact filename for THIS build's version — no globbing, so a leftover older-version APK in
@@ -164,23 +171,26 @@ for abi in "${ABIS[@]}"; do
   out_name="${base/Signal-Android/Signal-Plus}"   # brand it
   out_name="${out_name/-unsigned/}"               # it's signed now
   out="$RELEASE_DIR/$out_name"
-
-  # Drop any previously-signed APK for this ABI (any version) so the release dir only ever holds the
-  # current build. publish-update.sh picks the highest-versioned APK it finds there, so a stale
-  # higher-version leftover (e.g. after reverting a version bump) would otherwise get published instead.
-  # The "-release-" anchor keeps the x86 glob from also matching x86_64.
-  rm -f "$RELEASE_DIR"/Signal-Plus-website-prod-"${abi}"-release-*.apk
+  partial="$RELEASE_DIR/.partial-$out_name"
 
   log "Signing $abi -> $out_name"
-  "$ZIPALIGN" -p -f 4 "$unsigned" "$out"
+  "$ZIPALIGN" -p -f 4 "$unsigned" "$partial"
 
   sign_cmd=("$APKSIGNER" sign --ks "$KEYSTORE" --ks-key-alias "$KEY_ALIAS" --v4-signing-enabled false)
   [[ -n "${SIGNALPLUS_STORE_PASS:-}" ]] && sign_cmd+=(--ks-pass env:SIGNALPLUS_STORE_PASS)
   [[ -n "${SIGNALPLUS_KEY_PASS:-}"   ]] && sign_cmd+=(--key-pass env:SIGNALPLUS_KEY_PASS)
-  sign_cmd+=("$out")
-  "${sign_cmd[@]}"
+  sign_cmd+=("$partial")
+  "${sign_cmd[@]}" || die "Signing $abi failed — release dir left untouched."
 
-  "$APKSIGNER" verify "$out" >/dev/null
+  "$APKSIGNER" verify "$partial" >/dev/null || die "Signed $abi APK does not verify — release dir left untouched."
+
+  # Only now, with a verified APK in hand, drop any previously-signed APK for this ABI (any version)
+  # so the release dir only ever holds the current build. publish-update.sh picks the highest-versioned
+  # APK it finds there, so a stale higher-version leftover (e.g. after reverting a version bump) would
+  # otherwise get published instead. The "-release-" anchor keeps the x86 glob from also matching x86_64.
+  rm -f "$RELEASE_DIR"/Signal-Plus-website-prod-"${abi}"-release-*.apk
+  mv -f "$partial" "$out"
+  partial=""
   signed+=("$out")
 done
 
