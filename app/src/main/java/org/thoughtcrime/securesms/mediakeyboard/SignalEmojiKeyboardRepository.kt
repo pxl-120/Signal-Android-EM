@@ -15,6 +15,8 @@ import org.signal.mediakeyboard.data.EmojiCategoryPage
 import org.signal.mediakeyboard.data.EmojiKeyboardCategory
 import org.signal.mediakeyboard.data.EmojiKeyboardRepository
 import org.signal.mediakeyboard.data.KeyboardEmoji
+import org.thoughtcrime.securesms.components.emoji.CustomEmojiImageBinder
+import org.thoughtcrime.securesms.components.emoji.CustomEmojiRegistry
 import org.thoughtcrime.securesms.components.emoji.RecentEmojiPageModel
 import org.thoughtcrime.securesms.database.SignalDatabase
 import org.thoughtcrime.securesms.keyvalue.SignalStore
@@ -30,17 +32,27 @@ class SignalEmojiKeyboardRepository(
 
   companion object {
     private const val EMOJI_SEARCH_LIMIT = 50
+    private const val CUSTOM_EMOJI_SIZE_DP = 48
   }
 
   override suspend fun getEmojiPages(): List<EmojiCategoryPage> {
     return withContext(Dispatchers.Default) {
-      EmojiSource.latest.displayPages.mapNotNull { page ->
+      val pages = EmojiSource.latest.displayPages.mapNotNull { page ->
         val category = EmojiKeyboardCategory.entries.firstOrNull { it.key == page.key } ?: return@mapNotNull null
         EmojiCategoryPage(
           category = category,
           emoji = page.displayEmoji.map { emoji -> KeyboardEmoji(canonical = emoji.value, variations = emoji.variations) }
         )
+      }.toMutableList()
+
+      // Signal+: the imported custom emoji pack gets its own category, right after the first standard page.
+      val customTokens = CustomEmojiRegistry.getTokens(context)
+      if (customTokens.isNotEmpty()) {
+        val customPage = EmojiCategoryPage(EmojiKeyboardCategory.CUSTOM, customTokens.map { KeyboardEmoji(canonical = it) })
+        pages.add(minOf(1, pages.size), customPage)
       }
+
+      pages
     }
   }
 
@@ -62,9 +74,14 @@ class SignalEmojiKeyboardRepository(
 
     return withContext(Dispatchers.Default) {
       val variationsByCanonical = EmojiSource.latest.canonicalToVariations
-      SignalDatabase.emojiSearch.query(query, EMOJI_SEARCH_LIMIT).map { emoji ->
+      val standard = SignalDatabase.emojiSearch.query(query, EMOJI_SEARCH_LIMIT).map { emoji ->
         KeyboardEmoji(canonical = emoji, variations = variationsByCanonical[emoji] ?: emptyList())
       }
+
+      // Signal+: custom emoji matched by token, alias or literal, ordered per the "custom first" setting.
+      val custom = CustomEmojiRegistry.searchTokens(context, query).map { KeyboardEmoji(canonical = it) }
+      val ordered = if (SignalStore.settings.isCustomEmojiSearchFirst) custom + standard else standard + custom
+      ordered.distinctBy { it.canonical }.take(EMOJI_SEARCH_LIMIT)
     }
   }
 
@@ -89,6 +106,11 @@ class SignalEmojiKeyboardRepository(
   }
 
   override fun getEmojiDrawable(emoji: String): Drawable? {
+    if (CustomEmojiRegistry.isCustomToken(context, emoji)) {
+      val sizePx = (CUSTOM_EMOJI_SIZE_DP * context.resources.displayMetrics.density).toInt()
+      return CustomEmojiImageBinder.createDrawable(context, emoji, sizePx)
+    }
+
     return if (SignalStore.settings.isPreferSystemEmoji) {
       null
     } else {

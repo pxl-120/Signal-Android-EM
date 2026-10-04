@@ -13,8 +13,12 @@ import androidx.annotation.Nullable;
 
 final class InlineMediaDrawable extends Drawable implements Drawable.Callback, Animatable {
   private Drawable inner = new ColorDrawable(0x00000000);
+  private int      intrinsicWidth;
+  private int      intrinsicHeight;
 
   InlineMediaDrawable(int placeholderSizePx) {
+    intrinsicWidth  = placeholderSizePx;
+    intrinsicHeight = placeholderSizePx;
     setBounds(0, 0, placeholderSizePx, placeholderSizePx);
     inner.setBounds(getBounds());
     inner.setCallback(this);
@@ -33,6 +37,9 @@ final class InlineMediaDrawable extends Drawable implements Drawable.Callback, A
     inner = drawable;
     inner.setCallback(this);
 
+    intrinsicWidth  = targetWidth;
+    intrinsicHeight = targetHeightPx;
+
     Rect bounds = new Rect(0, 0, targetWidth, targetHeightPx);
     setBounds(bounds);
     inner.setBounds(bounds);
@@ -48,6 +55,17 @@ final class InlineMediaDrawable extends Drawable implements Drawable.Callback, A
   protected void onBoundsChange(Rect bounds) {
     super.onBoundsChange(bounds);
     inner.setBounds(bounds);
+  }
+
+  // Reported so hosts that size from intrinsics (e.g. a Compose DrawablePainter) keep the aspect ratio.
+  @Override
+  public int getIntrinsicWidth() {
+    return intrinsicWidth;
+  }
+
+  @Override
+  public int getIntrinsicHeight() {
+    return intrinsicHeight;
   }
 
   @Override

@@ -78,5 +78,6 @@ enum class EmojiKeyboardCategory(val key: String, @field:StringRes val label: In
   OBJECTS("Objects", R.string.MediaKeyboard__objects),
   SYMBOLS("Symbols", R.string.MediaKeyboard__symbols),
   FLAGS("Flags", R.string.MediaKeyboard__flags),
-  EMOTICONS("Emoticons", R.string.MediaKeyboard__emoticons)
+  EMOTICONS("Emoticons", R.string.MediaKeyboard__emoticons),
+  CUSTOM("Custom", R.string.MediaKeyboard__custom)
 }

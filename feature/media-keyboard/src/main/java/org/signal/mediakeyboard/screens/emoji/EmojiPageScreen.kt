@@ -27,6 +27,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.EmojiEmotions
 import androidx.compose.material.icons.outlined.EmojiEvents
 import androidx.compose.material.icons.outlined.EmojiFlags
@@ -427,6 +428,7 @@ private fun EmojiKeyboardCategory.icon(): ImageVector {
     EmojiKeyboardCategory.SYMBOLS -> Icons.Outlined.EmojiSymbols
     EmojiKeyboardCategory.FLAGS -> Icons.Outlined.EmojiFlags
     EmojiKeyboardCategory.EMOTICONS -> Icons.Outlined.SentimentSatisfied
+    EmojiKeyboardCategory.CUSTOM -> Icons.Outlined.AutoAwesome
   }
 }
 

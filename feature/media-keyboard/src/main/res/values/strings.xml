@@ -51,6 +51,8 @@
   <string name="MediaKeyboard__flags">Flags</string>
   <!-- Header for the emoji category holding text emoticons such as :-) -->
   <string name="MediaKeyboard__emoticons">Emoticons</string>
+  <!-- Signal+: category for the imported custom emoji pack -->
+  <string name="MediaKeyboard__custom">Custom</string>
 
   <!-- Sticker page -->
   <!-- Accessibility description for the button in the media keyboard top bar that opens the screen where sticker packs are managed. -->

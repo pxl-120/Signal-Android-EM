@@ -5,7 +5,8 @@ Guidance for Claude Code (and humans) working in this repository.
 ## What this project is
 
 This is a **fork of the official Signal Android client** (the GitHub `signalapp/Signal-Android`
-`main` branch, cloned at approximately upstream **v8.8.2**). The vast majority of the codebase is
+`main` branch, originally cloned at ~v8.8.2 and since kept current by merging upstream — last synced at
+**v8.30.1**). The vast majority of the codebase is
 unmodified upstream Signal and should be treated as a stable third-party dependency — **do not try
 to understand or document all of it.** Only a thin, well-contained slice has been changed.
 
@@ -132,18 +133,20 @@ fallback. `loadBytes` resolves `http(s)://` (download), `file://`, and absolute 
 | `CustomEmojiRegistry.java` | Loads the token→source map from the **imported pack only** (`filesDir/custom_emoji/current/emoji.json`, media under `current/media/`); empty until a pack is imported. Stores names **bare** (no colons) internally and exposes them **colon-wrapped** (`wrap`/`unwrap` at the boundary). Exposes `isCustomToken`, `getSource`, `getTokens`, `getAliases`/`getAliasToken`, `getLiterals`/`getLiteralToken`, `searchTokens` (shared query normalization + matching), `reload`. Thread-safe, lazily loaded. |
 | `CustomEmojiPackManager.java` | `importZip(Context, Uri)` — extracts a ZIP to a temp dir (with path-traversal guards), validates `emoji.json` (media resolved under `media/`), atomically rotates it into `current/`, then clears the media cache and reloads the registry. |
 | `CustomEmojiPageModel.java` | An `EmojiPageModel` with key `"Custom"` that backs the dedicated picker tab and the reaction-picker custom block. |
-| `CustomEmojiImageBinder.java` | Binds a custom token into an `ImageView` cell (picker / reaction grid) asynchronously, using the view's content-description/tag as the stable async identity guard. |
+| `CustomEmojiImageBinder.java` | Binds a custom token into an `ImageView` cell (picker / reaction grid) asynchronously, using the view's content-description/tag as the stable async identity guard. `createDrawable(...)` returns a standalone self-updating `InlineMediaDrawable` for hosts that take a `Drawable` instead of a view (the Compose media keyboard). |
 | `CustomEmojiAliasResolver.java` | Swaps a hand-typed completed `:alias:` → its `:token:` in the compose field (picker/autocomplete already insert the token directly). |
 | `CustomEmojiLiteralResolver.java` | Swaps a completed **literal** — a colon-free whole word (e.g. `o7`) that starts at text-start, after whitespace, or right after a colon (so it can follow a `:token:`) and is finished with a space — → its `:token:` in the compose field, consuming that one triggering space. |
 | `CustomEmojiPackUpdater.java` | "Import from URL": downloads + imports a pack from a URL and tracks a `{"version":…}` endpoint; on app start, re-imports when the version string changes (`checkForUpdate`). |
 
 ## Integration points (modified upstream files)
 
-19 upstream files are modified. Grouped by surface:
+~23 upstream files are modified. Grouped by surface. (Upstream moved the emoji core — `Emoji`,
+`EmojiPageModel`, `EmojiProvider`, `EmojiUtil`, `AnimatingImageSpan`, `EmojiSource`, the category
+attrs… — into the **`:lib:emoji`** module, package **`org.signal.emoji`**; fork code imports them from there.)
 
 **Message transcript rendering**
-- `components/emoji/EmojiTextView.java` — runs final text through `InlineMediaProvider.inlinify(...)`
-  so bubbles render tokens + inline URLs.
+- `components/emoji/EmojiTextView.kt` (Kotlin since upstream ~v8.2x) — `emojify(...)` runs its result
+  through `InlineMediaProvider.inlinify(...)` so bubbles render tokens + inline URLs.
 - `conversation/ConversationItem.java` — `shouldSuppressLinkPreview(...)`: when the inline-URL toggle
   is **on** and the body contains a `:url:`, suppress the normal link-preview card (avoids showing both
   the inline media and a preview for the same URL). When the toggle is off, never suppresses.
@@ -160,7 +163,21 @@ fallback. `loadBytes` resolves `http(s)://` (download), `file://`, and absolute 
   at once — this is what upstream Android ≥16 already does for a `ReplacementSpan`, but older releases
   only shrink the span and fail to re-layout, so without it a partial `:to` keeps rendering as an image.
 
-**Emoji picker**
+**Emoji picker — chat screen (Compose media keyboard)**
+
+Upstream replaced the conversation screen's emoji picker with a Compose keyboard in the
+**`:feature:media-keyboard`** module (`org.signal.mediakeyboard`). The classic `keyboard/emoji/**`
+picker below is still used elsewhere (e.g. story replies). Custom emoji in the new keyboard:
+- `feature/media-keyboard/.../data/EmojiKeyboardRepository.kt` — adds `EmojiKeyboardCategory.CUSTOM`
+  (key `"Custom"`, string `MediaKeyboard__custom` in the module's `strings.xml`).
+- `feature/media-keyboard/.../screens/emoji/EmojiPageScreen.kt` — tab icon for `CUSTOM`.
+- `mediakeyboard/SignalEmojiKeyboardRepository.kt` (app) — inserts the custom page right after the first
+  standard page, merges `CustomEmojiRegistry.searchTokens(...)` into `search` (honouring the
+  "custom first" toggle), and `getEmojiDrawable` returns `CustomEmojiImageBinder.createDrawable(...)`
+  for custom tokens (rendered via accompanist `DrawablePainter`, so animation + async load just work;
+  `InlineMediaDrawable` reports intrinsic size for aspect ratio).
+
+**Emoji picker — classic views**
 - `components/emoji/EmojiImageView.java` — `setImageEmoji` routes custom tokens to
   `CustomEmojiImageBinder`, else normal Signal rendering.
 - `components/emoji/EmojiPageViewGridAdapter.java` — picker grid cell renders custom tokens via the
@@ -204,7 +221,7 @@ and always returns the canonical token)
     `CustomEmojiPackManager.importZip(uri)` (background thread).
   - *From URL* → two `TextFields` (pack `.zip` URL, version URL) + "Download & apply" →
     `CustomEmojiPackUpdater.applyFromUrl(...)`, plus status lines (current version, last check, last update).
-- `keyvalue/SettingsValues.java` — backs all of the above. Privacy toggle: `isInlineUrlMediaEnabled()` /
+- `keyvalue/SettingsValues.kt` (Kotlin since upstream ~v8.2x; properties keep the same Java accessors) — backs all of the above. Privacy toggle: `isInlineUrlMediaEnabled()` /
   `setInlineUrlMediaEnabled(...)`, key `settings.signalplus.inlineUrlMediaEnabled`, **default off**, read
   at render time by `InlineMediaProvider` (message text), `CustomEmojiImageBinder`
   (picker / reactions / autocomplete popup), and `ConversationItem` (link-preview suppression).
@@ -367,7 +384,9 @@ app/src/main/java/.../components/emoji/
   PageModel/ImageBinder                      # custom emoji pack + registry
 app/src/main/java/.../components/ComposeText.java          # compose live preview + popup suppression
 app/src/main/java/.../conversation/ConversationItem.java   # link-preview suppression
-app/src/main/java/.../keyboard/emoji/**                    # picker tab integration
+app/src/main/java/.../keyboard/emoji/**                    # classic picker tab integration
+app/src/main/java/.../mediakeyboard/SignalEmojiKeyboardRepository.kt  # Compose chat keyboard: custom tab/search/drawables
+feature/media-keyboard/                      # +CUSTOM category (enum, icon, string)
 app/src/main/java/.../reactions/**                         # custom reactions
 app/src/main/java/.../messages/DataMessageProcessor.kt     # accept incoming token reactions
 app/src/main/java/.../keyboard/emoji/search/EmojiSearchRepository.kt   # picker search
