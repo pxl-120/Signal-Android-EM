@@ -44,13 +44,14 @@ import org.thoughtcrime.securesms.linkpreview.LinkPreview
 import org.thoughtcrime.securesms.mediapreview.MediaIntentFactory.MediaPreviewArgs
 import org.thoughtcrime.securesms.messagedetails.InternalMessageDetailsFragment.Companion.create
 import org.thoughtcrime.securesms.messagedetails.MessageDetailsAdapter.MessageDetailsViewState
+import org.thoughtcrime.securesms.mms.StickerSlide
 import org.thoughtcrime.securesms.polls.PollOption
 import org.thoughtcrime.securesms.polls.PollRecord
 import org.thoughtcrime.securesms.recipients.Recipient
 import org.thoughtcrime.securesms.recipients.RecipientId
 import org.thoughtcrime.securesms.safety.SafetyNumberBottomSheet.forOutgoingMessageRecord
-import org.thoughtcrime.securesms.stickers.StickerLocator
 import org.thoughtcrime.securesms.util.Material3OnScrollHelper
+import org.thoughtcrime.securesms.util.SystemWindowInsetsSetter
 import org.thoughtcrime.securesms.util.fragments.requireListener
 
 class MessageDetailsFragment : Fragment(), MessageDetailsAdapter.Callbacks {
@@ -69,6 +70,8 @@ class MessageDetailsFragment : Fragment(), MessageDetailsAdapter.Callbacks {
     val toolbar: Toolbar = view.findViewById(R.id.full_screen_dialog_toolbar)
     toolbar.setTitle(R.string.AndroidManifest__message_details)
     toolbar.setNavigationOnClickListener { requireActivity().onBackPressedDispatcher.onBackPressed() }
+
+    SystemWindowInsetsSetter.attach(view, viewLifecycleOwner)
 
     return view
   }
@@ -188,7 +191,7 @@ class MessageDetailsFragment : Fragment(), MessageDetailsAdapter.Callbacks {
     Log.w(TAG, "Not yet implemented!", Exception())
   }
 
-  override fun onStickerClicked(stickerLocator: StickerLocator) {
+  override fun onStickerClicked(stickerSlide: StickerSlide) {
     Log.w(TAG, "Not yet implemented!", Exception())
   }
 
@@ -204,11 +207,11 @@ class MessageDetailsFragment : Fragment(), MessageDetailsAdapter.Callbacks {
     Log.w(TAG, "Not yet implemented!", Exception())
   }
 
-  override fun onMessageSharedContactClicked(choices: MutableList<Recipient>) {
+  override fun onMessageSharedContactClicked(contact: Contact, choices: MutableList<Recipient>) {
     Log.w(TAG, "Not yet implemented!", Exception())
   }
 
-  override fun onInviteSharedContactClicked(choices: MutableList<Recipient>) {
+  override fun onInviteSharedContactClicked(contact: Contact) {
     Log.w(TAG, "Not yet implemented!", Exception())
   }
 

@@ -12,8 +12,6 @@ import android.net.wifi.WifiManager
 import android.os.Build
 import androidx.annotation.VisibleForTesting
 import androidx.core.content.ContextCompat
-import androidx.lifecycle.ViewModel
-import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -24,11 +22,14 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import org.greenrobot.eventbus.EventBus
 import org.greenrobot.eventbus.Subscribe
 import org.greenrobot.eventbus.ThreadMode
 import org.signal.core.models.AccountEntropyPool
+import org.signal.core.ui.compose.EventDrivenViewModel
 import org.signal.core.util.logging.Log
 import org.signal.devicetransfer.DeviceToDeviceTransferService
 import org.signal.devicetransfer.TransferStatus
@@ -37,7 +38,6 @@ import org.signal.registration.NetworkController
 import org.signal.registration.RegistrationFlowEvent
 import org.signal.registration.RegistrationFlowState
 import org.signal.registration.RegistrationRoute
-import org.signal.registration.screens.EventDrivenViewModel
 import org.signal.registration.screens.util.navigateBack
 import org.signal.registration.screens.util.navigateTo
 import kotlin.time.Duration.Companion.seconds
@@ -48,7 +48,7 @@ class DeviceTransferSetupViewModel(
   private val setupEvents: Flow<TransferStatus>,
   private val parentState: StateFlow<RegistrationFlowState>,
   private val parentEventEmitter: (RegistrationFlowEvent) -> Unit
-) : EventDrivenViewModel<DeviceTransferSetupScreenEvents>(TAG) {
+) : EventDrivenViewModel<DeviceTransferSetupScreenEvents>(TAG, shouldLogEvents = true) {
 
   companion object {
     private val TAG = Log.tag(DeviceTransferSetupViewModel::class)
@@ -76,6 +76,10 @@ class DeviceTransferSetupViewModel(
   private var shutdown: Boolean = false
 
   init {
+    _state
+      .onEach { Log.d(TAG, "[State] $it") }
+      .launchIn(viewModelScope)
+
     subscribeToSetupEvents()
     onEvent(DeviceTransferSetupScreenEvents.CheckPermissions)
   }
@@ -99,7 +103,7 @@ class DeviceTransferSetupViewModel(
           stateEmitter(state.copy(step = SetupStep.LOCATION_CHECK, takingTooLong = false))
           checkLocation(parentEventEmitter, stateEmitter)
         } else {
-          stateEmitter(state.copy(step = SetupStep.PERMISSIONS_CHECK, takingTooLong = false, oneTimeEvent = DeviceTransferSetupState.OneTimeEvent.RequestLocationPermission))
+          stateEmitter(state.copy(step = SetupStep.PERMISSIONS_CHECK, takingTooLong = false, pendingActions = state.pendingActions.copy(requestLocationPermission = true)))
         }
       }
 
@@ -113,19 +117,19 @@ class DeviceTransferSetupViewModel(
       }
 
       DeviceTransferSetupScreenEvents.RequestPermissionClicked -> {
-        stateEmitter(state.copy(oneTimeEvent = DeviceTransferSetupState.OneTimeEvent.RequestLocationPermission))
+        stateEmitter(state.copy(pendingActions = state.pendingActions.copy(requestLocationPermission = true)))
       }
 
       DeviceTransferSetupScreenEvents.OpenLocationSettingsClicked -> {
-        stateEmitter(state.copy(oneTimeEvent = DeviceTransferSetupState.OneTimeEvent.OpenLocationSettings))
+        stateEmitter(state.copy(pendingActions = state.pendingActions.copy(openLocationSettings = true)))
       }
 
       DeviceTransferSetupScreenEvents.OpenWifiSettingsClicked -> {
-        stateEmitter(state.copy(oneTimeEvent = DeviceTransferSetupState.OneTimeEvent.OpenWifiSettings))
+        stateEmitter(state.copy(pendingActions = state.pendingActions.copy(openWifiSettings = true)))
       }
 
       DeviceTransferSetupScreenEvents.OpenAppSettingsClicked -> {
-        stateEmitter(state.copy(oneTimeEvent = DeviceTransferSetupState.OneTimeEvent.OpenAppSettings))
+        stateEmitter(state.copy(pendingActions = state.pendingActions.copy(openAppSettings = true)))
       }
 
       DeviceTransferSetupScreenEvents.OnResume -> {
@@ -175,8 +179,20 @@ class DeviceTransferSetupViewModel(
         parentEventEmitter.navigateBack()
       }
 
-      DeviceTransferSetupScreenEvents.ConsumeOneTimeEvent -> {
-        stateEmitter(state.copy(oneTimeEvent = null))
+      DeviceTransferSetupScreenEvents.RequestLocationPermissionHandled -> {
+        stateEmitter(state.copy(pendingActions = state.pendingActions.copy(requestLocationPermission = false)))
+      }
+
+      DeviceTransferSetupScreenEvents.OpenLocationSettingsHandled -> {
+        stateEmitter(state.copy(pendingActions = state.pendingActions.copy(openLocationSettings = false)))
+      }
+
+      DeviceTransferSetupScreenEvents.OpenWifiSettingsHandled -> {
+        stateEmitter(state.copy(pendingActions = state.pendingActions.copy(openWifiSettings = false)))
+      }
+
+      DeviceTransferSetupScreenEvents.OpenAppSettingsHandled -> {
+        stateEmitter(state.copy(pendingActions = state.pendingActions.copy(openAppSettings = false)))
       }
     }
   }
@@ -322,18 +338,5 @@ class DeviceTransferSetupViewModel(
     super.onCleared()
     cancelTakingTooLong()
     setupEventsJob?.cancel()
-  }
-
-  class Factory(
-    private val context: Context,
-    private val networkController: NetworkController,
-    private val setupEvents: Flow<TransferStatus>,
-    private val parentState: StateFlow<RegistrationFlowState>,
-    private val parentEventEmitter: (RegistrationFlowEvent) -> Unit
-  ) : ViewModelProvider.Factory {
-    @Suppress("UNCHECKED_CAST")
-    override fun <T : ViewModel> create(modelClass: Class<T>): T {
-      return DeviceTransferSetupViewModel(context, networkController, setupEvents, parentState, parentEventEmitter) as T
-    }
   }
 }

@@ -17,7 +17,6 @@ import org.thoughtcrime.securesms.keyvalue.SignalStore
 import org.thoughtcrime.securesms.util.BackupUtil
 import org.thoughtcrime.securesms.util.ConversationUtil
 import org.thoughtcrime.securesms.util.RemoteConfig
-import org.thoughtcrime.securesms.util.TextSecurePreferences
 
 class ChatsSettingsViewModel @JvmOverloads constructor(
   private val repository: ChatsSettingsRepository = ChatsSettingsRepository()
@@ -29,12 +28,12 @@ class ChatsSettingsViewModel @JvmOverloads constructor(
     ChatsSettingsState(
       generateLinkPreviews = SignalStore.settings.isLinkPreviewsEnabled,
       useAddressBook = SignalStore.settings.isPreferSystemContactPhotos,
-      keepMutedChatsArchived = SignalStore.settings.shouldKeepMutedChatsArchived(),
+      keepMutedChatsArchived = SignalStore.settings.keepMutedChatsArchived,
       useSystemEmoji = SignalStore.settings.isPreferSystemEmoji,
       enterKeySends = SignalStore.settings.isEnterKeySends,
       localBackupsEnabled = SignalStore.settings.isBackupEnabled && BackupUtil.canUserAccessBackupDirectory(AppDependencies.application),
       folderCount = 0,
-      userUnregistered = TextSecurePreferences.isUnauthorizedReceived(AppDependencies.application) || !SignalStore.account.isRegistered,
+      userUnregistered = SignalStore.account.isUnauthorizedReceived || !SignalStore.account.isRegistered,
       clientDeprecated = SignalStore.misc.isClientDeprecated,
       isPlaintextExportEnabled = RemoteConfig.localPlaintextExport,
       chatExportState = ChatExportState.None
@@ -97,7 +96,7 @@ class ChatsSettingsViewModel @JvmOverloads constructor(
 
   fun setKeepMutedChatsArchived(enabled: Boolean) {
     store.update { it.copy(keepMutedChatsArchived = enabled) }
-    SignalStore.settings.setKeepMutedChatsArchived(enabled)
+    SignalStore.settings.keepMutedChatsArchived = enabled
     repository.syncKeepMutedChatsArchivedState()
   }
 

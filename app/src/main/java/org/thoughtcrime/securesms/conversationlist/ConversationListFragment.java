@@ -27,7 +27,6 @@ import android.graphics.Canvas;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
 import android.net.Uri;
-import android.os.AsyncTask;
 import android.os.Bundle;
 import android.text.TextUtils;
 import android.view.LayoutInflater;
@@ -106,7 +105,6 @@ import org.thoughtcrime.securesms.banner.banners.UnauthorizedBanner;
 import org.thoughtcrime.securesms.banner.banners.UsernameOutOfSyncBanner;
 import org.thoughtcrime.securesms.components.RatingManager;
 import org.thoughtcrime.securesms.components.SignalProgressDialog;
-import org.thoughtcrime.securesms.components.compose.DeleteSyncEducationDialog;
 import org.thoughtcrime.securesms.components.menu.ActionItem;
 import org.thoughtcrime.securesms.components.menu.SignalBottomActionBar;
 import org.thoughtcrime.securesms.components.menu.SignalContextMenu;
@@ -145,7 +143,8 @@ import org.thoughtcrime.securesms.groups.SelectionLimits;
 import org.thoughtcrime.securesms.jobs.RefreshOwnProfileJob;
 import org.thoughtcrime.securesms.keyvalue.AccountValues;
 import org.thoughtcrime.securesms.keyvalue.SignalStore;
-import org.thoughtcrime.securesms.main.MainNavigationListLocation;
+import org.thoughtcrime.securesms.main.MainListRoute;
+import org.thoughtcrime.securesms.main.MainNavigationEvents;
 import org.thoughtcrime.securesms.main.MainNavigationViewModel;
 import org.thoughtcrime.securesms.main.MainSnackbarHostKey;
 import org.thoughtcrime.securesms.main.MainToolbarMode;
@@ -169,7 +168,6 @@ import org.thoughtcrime.securesms.util.RemoteConfig;
 import org.thoughtcrime.securesms.util.SignalLocalMetrics;
 import org.thoughtcrime.securesms.util.SignalProxyUtil;
 import org.thoughtcrime.securesms.util.SnapToTopDataObserver;
-import org.thoughtcrime.securesms.util.TextSecurePreferences;
 import org.thoughtcrime.securesms.util.ViewUtil;
 import org.thoughtcrime.securesms.util.adapter.mapping.PagingMappingAdapter;
 import org.thoughtcrime.securesms.verify.SelfVerificationFailureSheet;
@@ -453,7 +451,8 @@ public class ConversationListFragment extends MainFragment implements Conversati
     }
 
     if (SignalStore.account().isRegistered() &&
-        !TextSecurePreferences.isUnauthorizedReceived(requireContext()) &&
+        SignalStore.registration().isRegistrationComplete() &&
+        !SignalStore.account().isUnauthorizedReceived() &&
         SignalStore.settings().getAutomaticVerificationEnabled() &&
         SignalStore.misc().getHasKeyTransparencyFailure() &&
         !SignalStore.misc().getHasSeenKeyTransparencyFailure()) {
@@ -466,7 +465,7 @@ public class ConversationListFragment extends MainFragment implements Conversati
     requireActivity().getOnBackPressedDispatcher().addCallback(getViewLifecycleOwner(), chatListBackHandler);
 
     lifecycleDisposable.bindTo(getViewLifecycleOwner());
-    lifecycleDisposable.add(mainNavigationViewModel.getTabClickEventsObservable().filter(tab -> tab == MainNavigationListLocation.CHATS)
+    lifecycleDisposable.add(mainNavigationViewModel.getTabClickEventsObservable().filter(tab -> tab == MainListRoute.Chats)
                                                    .subscribe(unused -> {
                                                      Log.d(TAG, "Scroll to top please");
                                                      LinearLayoutManager layoutManager            = (LinearLayoutManager) list.getLayoutManager();
@@ -703,7 +702,7 @@ public class ConversationListFragment extends MainFragment implements Conversati
   @Override
   public void onShowArchiveClick() {
     if (viewModel.currentSelectedConversations().isEmpty()) {
-      mainNavigationViewModel.goTo(MainNavigationListLocation.ARCHIVE);
+      mainNavigationViewModel.onEvent(new MainNavigationEvents.GoToList(MainListRoute.Archive));
     }
   }
 
@@ -766,7 +765,7 @@ public class ConversationListFragment extends MainFragment implements Conversati
           } else if (event instanceof MainToolbarViewModel.Event.Chats.ClearFilter) {
             onClearFilterClick();
           } else if (event instanceof MainToolbarViewModel.Event.Chats.CloseArchive) {
-            mainNavigationViewModel.goTo(MainNavigationListLocation.CHATS);
+            mainNavigationViewModel.onEvent(new MainNavigationEvents.GoToList(MainListRoute.Chats));
           }
         })
     );
@@ -836,10 +835,7 @@ public class ConversationListFragment extends MainFragment implements Conversati
         new UnauthorizedBanner(requireContext()),
         new ServiceOutageBanner(requireContext()),
         new OutdatedBuildBanner(),
-        new DozeBanner(requireContext(), () -> {
-          bannerManager.updateContent(bannerView.get());
-          return Unit.INSTANCE;
-        }),
+        new DozeBanner(requireContext()),
         new CdsTemporaryErrorBanner(getChildFragmentManager()),
         new CdsPermanentErrorBanner(getChildFragmentManager()),
         new UsernameOutOfSyncBanner((usernameSyncState) -> {
@@ -1193,30 +1189,27 @@ public class ConversationListFragment extends MainFragment implements Conversati
   }
 
   @SuppressLint("StaticFieldLeak")
-  private void handleDelete(@NonNull Collection<Long> ids) {
-    if (DeleteSyncEducationDialog.shouldShow()) {
-      lifecycleDisposable.add(
-          DeleteSyncEducationDialog.show(getChildFragmentManager())
-                                   .subscribe(() -> handleDelete(ids))
-      );
-
-      return;
-    }
-
+  private void handleDelete(@NonNull Collection<Long> ids, boolean containsActiveGroup) {
     int                        conversationsCount = ids.size();
     MaterialAlertDialogBuilder alert              = new MaterialAlertDialogBuilder(requireActivity());
     Context                    context            = requireContext();
+    boolean                    isMultiDevice      = SignalStore.account().isMultiDevice();
 
     alert.setTitle(context.getResources().getQuantityString(R.plurals.ConversationListFragment_delete_selected_conversations,
                                                             conversationsCount, conversationsCount));
 
-    if (SignalStore.account().isMultiDevice()) {
-      alert.setMessage(context.getResources().getQuantityString(R.plurals.ConversationListFragment_this_will_permanently_delete_all_n_selected_conversations_linked_device,
-                                                                conversationsCount, conversationsCount));
+    int messageRes;
+    if (isMultiDevice && containsActiveGroup) {
+      messageRes = R.plurals.ConversationListFragment_this_will_permanently_delete_all_n_selected_conversations_linked_device_group;
+    } else if (isMultiDevice) {
+      messageRes = R.plurals.ConversationListFragment_this_will_permanently_delete_all_n_selected_conversations_linked_device;
+    } else if (containsActiveGroup) {
+      messageRes = R.plurals.ConversationListFragment_this_will_permanently_delete_all_n_selected_conversations_group;
     } else {
-      alert.setMessage(context.getResources().getQuantityString(R.plurals.ConversationListFragment_this_will_permanently_delete_all_n_selected_conversations,
-                                                                conversationsCount, conversationsCount));
+      messageRes = R.plurals.ConversationListFragment_this_will_permanently_delete_all_n_selected_conversations;
     }
+
+    alert.setMessage(context.getResources().getQuantityString(messageRes, conversationsCount, conversationsCount));
 
     alert.setCancelable(true);
 
@@ -1224,33 +1217,22 @@ public class ConversationListFragment extends MainFragment implements Conversati
       final Set<Long> selectedConversations = new HashSet<>(ids);
 
       if (!selectedConversations.isEmpty()) {
-        new AsyncTask<Void, Void, Void>() {
-          private SignalProgressDialog dialog;
+        SignalProgressDialog progressDialog = SignalProgressDialog.show(requireActivity(),
+                                                                        context.getString(R.string.ConversationListFragment_deleting),
+                                                                        context.getResources().getQuantityString(R.plurals.ConversationListFragment_deleting_selected_conversations, conversationsCount),
+                                                                        true,
+                                                                        false);
 
-          @Override
-          protected void onPreExecute() {
-            dialog = SignalProgressDialog.show(requireActivity(),
-                                               context.getString(R.string.ConversationListFragment_deleting),
-                                               context.getResources().getQuantityString(R.plurals.ConversationListFragment_deleting_selected_conversations, conversationsCount),
-                                               true,
-                                               false);
-          }
-
-          @Override
-          protected Void doInBackground(Void... params) {
-            Log.d(TAG, "[handleDelete] Deleting " + selectedConversations.size() + " chats");
-            SignalDatabase.threads().deleteConversations(selectedConversations, true);
-            AppDependencies.getMessageNotifier().updateNotification(AppDependencies.getApplication());
-            Log.d(TAG, "[handleDelete] Delete complete");
-            return null;
-          }
-
-          @Override
-          protected void onPostExecute(Void result) {
-            dialog.dismiss();
-            endActionModeIfActive();
-          }
-        }.executeOnExecutor(SignalExecutors.BOUNDED);
+        SimpleTask.run(getViewLifecycleOwner().getLifecycle(), () -> {
+          Log.d(TAG, "[handleDelete] Deleting " + selectedConversations.size() + " chats");
+          SignalDatabase.threads().deleteConversations(selectedConversations, true);
+          AppDependencies.getMessageNotifier().updateNotification(AppDependencies.getApplication());
+          Log.d(TAG, "[handleDelete] Delete complete");
+          return null;
+        }, unused -> {
+          progressDialog.dismiss();
+          endActionModeIfActive();
+        });
       }
     });
 
@@ -1435,7 +1417,7 @@ public class ConversationListFragment extends MainFragment implements Conversati
       }
 
       if (SignalStore.labs().getIncognito()) {
-        items.add(new ActionItem(R.drawable.symbol_view_once_24, "Open Incognito (Labs)", () -> handleOpenIncognito(conversation)));
+        items.add(new ActionItem(org.signal.core.ui.R.drawable.symbol_view_once_24, "Open Incognito (Labs)", () -> handleOpenIncognito(conversation)));
       }
     }
 
@@ -1464,7 +1446,7 @@ public class ConversationListFragment extends MainFragment implements Conversati
       items.add(new ActionItem(R.drawable.symbol_archive_24, getResources().getString(R.string.ConversationListFragment_archive), () -> handleArchive(id)));
     }
 
-    items.add(new ActionItem(org.signal.core.ui.R.drawable.symbol_trash_24, getResources().getString(R.string.ConversationListFragment_delete), () -> handleDelete(id)));
+    items.add(new ActionItem(org.signal.core.ui.R.drawable.symbol_trash_24, getResources().getString(R.string.ConversationListFragment_delete), () -> handleDelete(id, conversation.getThreadRecord().getRecipient().resolve().isActiveGroup())));
 
     activeContextMenu = new SignalContextMenu.Builder(view, list)
         .offsetX(ViewUtil.dpToPx(12))
@@ -1536,11 +1518,12 @@ public class ConversationListFragment extends MainFragment implements Conversati
   }
 
   private void updateMultiSelectState() {
-    int     count       = viewModel.currentSelectedConversations().size();
-    boolean hasUnread   = viewModel.currentSelectedConversations().stream().anyMatch(conversation -> !conversation.getThreadRecord().isRead());
-    boolean hasUnpinned = viewModel.currentSelectedConversations().stream().anyMatch(conversation -> !conversation.getThreadRecord().isPinned());
-    boolean hasUnmuted  = viewModel.currentSelectedConversations().stream().anyMatch(conversation -> !conversation.getThreadRecord().getRecipient().live().get().isMuted());
-    boolean canPin      = viewModel.getPinnedCount() < RemoteConfig.pinnedChatLimit();
+    int     count         = viewModel.currentSelectedConversations().size();
+    boolean hasUnread     = viewModel.currentSelectedConversations().stream().anyMatch(conversation -> !conversation.getThreadRecord().isRead());
+    boolean hasUnpinned   = viewModel.currentSelectedConversations().stream().anyMatch(conversation -> !conversation.getThreadRecord().isPinned());
+    boolean hasUnmuted    = viewModel.currentSelectedConversations().stream().anyMatch(conversation -> !conversation.getThreadRecord().getRecipient().resolve().isMuted());
+    boolean containsGroup = viewModel.currentSelectedConversations().stream().anyMatch(conversation -> conversation.getThreadRecord().getRecipient().resolve().isActiveGroup());
+    boolean canPin        = viewModel.getPinnedCount() < RemoteConfig.pinnedChatLimit();
 
     if (mainToolbarViewModel.isInActionMode()) {
       mainToolbarViewModel.setActionModeCount(count);
@@ -1571,7 +1554,7 @@ public class ConversationListFragment extends MainFragment implements Conversati
       items.add(new ActionItem(R.drawable.symbol_archive_24, getResources().getString(R.string.ConversationListFragment_archive), () -> handleArchive(selectionIds)));
     }
 
-    items.add(new ActionItem(org.signal.core.ui.R.drawable.symbol_trash_24, getResources().getString(R.string.ConversationListFragment_delete), () -> handleDelete(selectionIds)));
+    items.add(new ActionItem(org.signal.core.ui.R.drawable.symbol_trash_24, getResources().getString(R.string.ConversationListFragment_delete), () -> handleDelete(selectionIds, containsGroup)));
 
     if (hasUnmuted) {
       items.add(new ActionItem(R.drawable.symbol_bell_slash_24, getResources().getString(R.string.ConversationListFragment_mute), () -> handleMute(viewModel.currentSelectedConversations())));
@@ -1889,8 +1872,15 @@ public class ConversationListFragment extends MainFragment implements Conversati
       float absoluteDx = Math.abs(dX);
 
       if (actionState == ItemTouchHelper.ACTION_STATE_SWIPE) {
+        View itemView = viewHolder.itemView;
+
+        if (!itemView.isAttachedToWindow()) {
+          itemView.setTranslationX(0);
+          ViewCompat.setElevation(itemView, 0);
+          return;
+        }
+
         Resources resources       = getResources();
-        View      itemView        = viewHolder.itemView;
         float     percentDx       = absoluteDx / viewHolder.itemView.getWidth();
         int       color           = ArgbEvaluatorCompat.getInstance().evaluate(Math.min(1f, percentDx * (1 / 0.25f)), archiveColorStart, archiveColorEnd);
         float     scaleStartPoint = DimensionUnit.DP.toPixels(48f);

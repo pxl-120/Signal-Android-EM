@@ -34,7 +34,6 @@ import org.thoughtcrime.securesms.registration.data.LocalRegistrationMetadataUti
 import org.thoughtcrime.securesms.registration.data.RegistrationData
 import org.thoughtcrime.securesms.registration.data.RegistrationRepository
 import org.thoughtcrime.securesms.registration.util.RegistrationUtil
-import org.thoughtcrime.securesms.util.TextSecurePreferences
 import org.whispersystems.signalservice.api.profiles.SignalServiceProfile
 import org.whispersystems.signalservice.api.push.SignalServiceAddress
 import java.util.UUID
@@ -88,8 +87,8 @@ object TestUsers {
     SignalStore.registration.restoreDecisionState = RestoreDecisionState.Skipped
     RegistrationUtil.maybeMarkRegistrationComplete()
     SignalDatabase.recipients.setProfileName(Recipient.self().id, ProfileName.fromParts("Tester", "McTesterson"))
-    TextSecurePreferences.setPromptedOptimizeDoze(application, true)
-    TextSecurePreferences.setRatingEnabled(application, false)
+    SignalStore.uiHints.setHasPromptedOptimizeDoze(true)
+    SignalStore.misc.ratingEnabled = false
 
     PreKeyUtil.generateAndStoreSignedPreKey(AppDependencies.protocolStore.aci(), SignalStore.account.aciPreKeys)
     PreKeyUtil.generateAndStoreOneTimeEcPreKeys(AppDependencies.protocolStore.aci(), SignalStore.account.aciPreKeys)
@@ -133,7 +132,7 @@ object TestUsers {
         val recipientId = RecipientId.from(SignalServiceAddress(aci, "+15555551%03d".format(i)))
         SignalDatabase.recipients.setProfileName(recipientId, ProfileName.fromParts("Buddy", "#$i"))
         SignalDatabase.recipients.setProfileKeyIfAbsent(recipientId, ProfileKeyUtil.createNew())
-        SignalDatabase.recipients.setCapabilities(recipientId, SignalServiceProfile.Capabilities(true, true, true))
+        SignalDatabase.recipients.setCapabilities(recipientId, SignalServiceProfile.Capabilities(true, true, true, false))
         SignalDatabase.recipients.setProfileSharing(recipientId, true)
         SignalDatabase.recipients.markRegistered(recipientId, aci)
         val otherIdentity = IdentityKeyPair.generate()
@@ -157,7 +156,7 @@ object TestUsers {
         val recipientId = RecipientId.from(SignalServiceAddress(otherClient.serviceId, otherClient.e164))
         SignalDatabase.recipients.setProfileName(recipientId, ProfileName.fromParts("Buddy", "#$i"))
         SignalDatabase.recipients.setProfileKeyIfAbsent(recipientId, otherClient.profileKey)
-        SignalDatabase.recipients.setCapabilities(recipientId, SignalServiceProfile.Capabilities(true, true, true))
+        SignalDatabase.recipients.setCapabilities(recipientId, SignalServiceProfile.Capabilities(true, true, true, false))
         SignalDatabase.recipients.setProfileSharing(recipientId, true)
         SignalDatabase.recipients.markRegistered(recipientId, otherClient.serviceId)
         AppDependencies.protocolStore.aci().saveIdentity(SignalProtocolAddress(otherClient.serviceId.toString(), 1), otherClient.identityKeyPair.publicKey)

@@ -36,6 +36,7 @@ import org.signal.aesgcmprovider.AesGcmProvider;
 import org.signal.core.util.AppForegroundObserver;
 import org.signal.core.util.DiskUtil;
 import org.signal.core.util.MemoryTracker;
+import org.signal.core.util.PartAuthorityUris;
 import org.signal.core.util.Util;
 import org.signal.core.util.concurrent.AnrDetector;
 import org.signal.core.util.concurrent.SignalExecutors;
@@ -52,6 +53,8 @@ import org.signal.ringrtc.CallManager;
 import org.thoughtcrime.securesms.apkupdate.ApkUpdateRefreshListener;
 import org.thoughtcrime.securesms.avatar.AvatarPickerStorage;
 import org.thoughtcrime.securesms.backup.v2.BackupRepository;
+import org.thoughtcrime.securesms.clockskew.ClockSkewDetector;
+import org.thoughtcrime.securesms.contacts.index.ContactIndexRepository;
 import org.thoughtcrime.securesms.preferences.EditProxyActivity;
 import org.thoughtcrime.securesms.components.emoji.CustomEmojiPackUpdater;
 import org.thoughtcrime.securesms.conversation.drafts.DraftBlobs;
@@ -62,8 +65,8 @@ import org.thoughtcrime.securesms.database.SignalDatabase;
 import org.thoughtcrime.securesms.database.SqlCipherLibraryLoader;
 import org.thoughtcrime.securesms.dependencies.AppDependencies;
 import org.thoughtcrime.securesms.dependencies.ApplicationDependencyProvider;
-import org.thoughtcrime.securesms.emoji.EmojiSource;
-import org.thoughtcrime.securesms.emoji.JumboEmoji;
+import org.signal.emoji.EmojiSource;
+import org.signal.emoji.JumboEmoji;
 import org.thoughtcrime.securesms.gcm.FcmFetchManager;
 import org.thoughtcrime.securesms.glide.SignalGlideComponents;
 import org.thoughtcrime.securesms.jobmanager.impl.SealedSenderConstraint;
@@ -94,6 +97,7 @@ import org.thoughtcrime.securesms.jobs.RetrieveProfileJob;
 import org.thoughtcrime.securesms.jobs.RetrieveRemoteAnnouncementsJob;
 import org.thoughtcrime.securesms.jobs.StoryOnboardingDownloadJob;
 import org.thoughtcrime.securesms.keyvalue.KeepMessagesDuration;
+import org.thoughtcrime.securesms.keyvalue.PlainTextKeyValueStore;
 import org.thoughtcrime.securesms.keyvalue.SignalStore;
 import org.thoughtcrime.securesms.logging.CustomSignalProtocolLogger;
 import org.thoughtcrime.securesms.logging.PersistentLogger;
@@ -105,6 +109,7 @@ import org.thoughtcrime.securesms.mms.SignalGlideModule;
 import org.thoughtcrime.securesms.ratelimit.RateLimitUtil;
 import org.thoughtcrime.securesms.recipients.Recipient;
 import org.thoughtcrime.securesms.registration.util.RegistrationUtil;
+import org.thoughtcrime.securesms.registration.v2.AppContactSupportController;
 import org.thoughtcrime.securesms.registration.v2.AppRegistrationNetworkController;
 import org.thoughtcrime.securesms.registration.v2.AppRegistrationStorageController;
 import org.thoughtcrime.securesms.ringrtc.RingRtcLogger;
@@ -120,8 +125,7 @@ import org.thoughtcrime.securesms.service.webrtc.AndroidTelecomUtil;
 import org.thoughtcrime.securesms.storage.StorageSyncHelper;
 import org.thoughtcrime.securesms.util.AppStartup;
 import org.thoughtcrime.securesms.util.BatterySnapshotTracker;
-import org.thoughtcrime.securesms.util.CommunicationActions;
-import org.thoughtcrime.securesms.util.DeviceProperties;
+import org.signal.core.util.DeviceProperties;
 import org.thoughtcrime.securesms.util.DynamicTheme;
 import org.thoughtcrime.securesms.util.Environment;
 import org.signal.core.util.PlayServicesUtil;
@@ -129,8 +133,6 @@ import org.thoughtcrime.securesms.util.RemoteConfig;
 import org.thoughtcrime.securesms.util.SignalLocalMetrics;
 import org.thoughtcrime.securesms.util.SignalUncaughtExceptionHandler;
 import org.thoughtcrime.securesms.util.SqlCipherLogTarget;
-import org.thoughtcrime.securesms.util.SupportEmailUtil;
-import org.thoughtcrime.securesms.util.TextSecurePreferences;
 import org.thoughtcrime.securesms.util.VersionTracker;
 import org.thoughtcrime.securesms.util.dynamiclanguage.DynamicLanguageContextWrapper;
 import org.whispersystems.signalservice.api.websocket.SignalWebSocket;
@@ -167,6 +169,8 @@ public class ApplicationContext extends Application implements AppForegroundObse
 
   @Override
   public void onCreate() {
+    PartAuthorityUris.init(BuildConfig.APPLICATION_ID);
+
     Tracer.getInstance().start("Application#onCreate()");
     AppStartup.getInstance().onApplicationCreate();
     SignalLocalMetrics.ColdStart.start();
@@ -222,7 +226,7 @@ public class ApplicationContext extends Application implements AppForegroundObse
               .addNonBlocking(this::initializeCircumvention)
               .addNonBlocking(this::initializeCleanup)
               .addNonBlocking(this::initializeGlideCodecs)
-              .addNonBlocking(SealedSenderConstraint::checkAndSetValidity)
+              .addNonBlocking(SealedSenderConstraint::refreshAndRotateIfNeeded)
               .addNonBlocking(StorageSyncHelper::scheduleRoutineSync)
               .addNonBlocking(this::beginJobLoop)
               .addNonBlocking(EmojiSource::refresh)
@@ -239,6 +243,7 @@ public class ApplicationContext extends Application implements AppForegroundObse
               .addPostRender(() -> DownloadLatestEmojiDataJob.scheduleIfNecessary(this))
               .addPostRender(EmojiSearchIndexDownloadJob::scheduleIfNecessary)
               .addPostRender(MessageSendLogCleanupJob::enqueue)
+              .addPostRender(() -> ContactIndexRepository.deleteAbandonedIndex(this))
               .addPostRender(() -> JumboEmoji.updateCurrentVersion(this))
               .addPostRender(this::initializeCustomEmojiPackUpdate)
               .addPostRender(RetrieveRemoteAnnouncementsJob::enqueue)
@@ -253,9 +258,11 @@ public class ApplicationContext extends Application implements AppForegroundObse
               .addPostRender(AccountConsistencyWorkerJob::enqueueIfNecessary)
               .addPostRender(GroupRingCleanupJob::enqueue)
               .addPostRender(LinkedDeviceInactiveCheckJob::enqueueIfNecessary)
+              .addPostRender(RefreshAttributesJob::enqueueIfNecessary)
               .addPostRender(() -> ActiveCallManager.clearNotifications(this))
               .addPostRender(RestoreOptimizedMediaJob::enqueueIfNecessary)
               .addPostRender(() -> AppDependencies.getPinnedMessageManager().scheduleIfNecessary())
+              .addPostRender(() -> AppDependencies.getUnreadReminderManager().scheduleIfNecessary())
               .execute();
 
     Log.d(TAG, "onCreate() took " + (System.currentTimeMillis() - startTime) + " ms");
@@ -278,6 +285,7 @@ public class ApplicationContext extends Application implements AppForegroundObse
     startAnrDetector();
 
     SignalExecutors.BOUNDED.execute(() -> {
+      SealedSenderConstraint.refreshAndRotateIfNeeded();
       BackupRefreshJob.enqueueIfNecessary();
       InAppPaymentAuthCheckJob.enqueueIfNeeded();
       RemoteConfig.refreshIfNecessary();
@@ -422,18 +430,19 @@ public class ApplicationContext extends Application implements AppForegroundObse
       AppDependencies.init(this, new ApplicationDependencyProvider(this));
     }
     AppForegroundObserver.begin();
+    ClockSkewDetector.beginObserving(this);
 
-    if (Environment.USE_NEW_REGISTRATION) {
-      initializeRegistrationDependencies();
-    }
+    initializeRegistrationDependencies();
   }
 
   private void initializeRegistrationDependencies() {
     RegistrationDependencies.provide(
       new RegistrationDependencies(
-        new AppRegistrationNetworkController(this, AppDependencies.getPushServiceSocket()),
+        new AppRegistrationNetworkController(this, AppDependencies.getRegistrationApiV2()),
         new AppRegistrationStorageController(this),
         Environment.IS_LINK_AND_SYNC_AVAILABLE,
+        Environment.PHONENUMBERLESS_REGISTRATION,
+        Environment.supportsGooglePlayBilling(),
         null,
         context -> {
           context.startActivity(new Intent(context, SubmitDebugLogActivity.class));
@@ -443,24 +452,20 @@ public class ApplicationContext extends Application implements AppForegroundObse
           context.startActivity(EditProxyActivity.intent(context));
           return Unit.INSTANCE;
         },
-        (context, subject) -> {
-          String body = SupportEmailUtil.generateSupportEmailBody(context, subject, null, null);
-          CommunicationActions.openEmail(context, SupportEmailUtil.getSupportEmailAddress(context), subject, body);
-          return Unit.INSTANCE;
-        }
+        new AppContactSupportController()
       )
     );
   }
 
   private void initializeFirstEverAppLaunch() {
-    if (TextSecurePreferences.getFirstInstallVersion(this) == -1) {
+    if (SignalStore.misc().getFirstInstallVersion() == -1) {
       if (!SignalDatabase.databaseFileExists(this) || VersionTracker.getDaysSinceFirstInstalled(this) < 365) {
         Log.i(TAG, "First ever app launch!");
         AppInitialization.onFirstEverAppLaunch(this);
       }
 
       Log.i(TAG, "Setting first install version to " + BuildConfig.CANONICAL_VERSION_CODE);
-      TextSecurePreferences.setFirstInstallVersion(this, BuildConfig.CANONICAL_VERSION_CODE);
+      SignalStore.misc().setFirstInstallVersion(BuildConfig.CANONICAL_VERSION_CODE);
     } else if (!SignalStore.settings().getPassphraseDisabled() && VersionTracker.getDaysSinceFirstInstalled(this) < 90) {
       Log.i(TAG, "Detected a new install that doesn't have passphrases disabled -- assuming bad initialization.");
       AppInitialization.onRepairFirstEverAppLaunch(this);
@@ -584,7 +589,7 @@ public class ApplicationContext extends Application implements AppForegroundObse
   }
 
   private void executePendingContactSync() {
-    if (TextSecurePreferences.needsFullContactSync(this)) {
+    if (SignalStore.misc().getNeedsFullContactSync()) {
       AppDependencies.getJobManager().add(new MultiDeviceContactUpdateJob(true));
     }
   }
@@ -641,6 +646,7 @@ public class ApplicationContext extends Application implements AppForegroundObse
 
   @Override
   protected void attachBaseContext(Context base) {
+    PlainTextKeyValueStore.init(base);
     DynamicLanguageContextWrapper.updateContext(base);
     super.attachBaseContext(base);
   }

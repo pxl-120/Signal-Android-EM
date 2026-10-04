@@ -516,7 +516,7 @@ class SyncMessageProcessorTest_synchronizeDeleteForMe {
     SignalDatabase.messages.deleteMessage(messageId = oneToOnePlaceHolderMessage, threadId = aliceThreadId, notify = false, updateThread = false)
     SignalDatabase.messages.deleteMessage(messageId = groupPlaceholderMessage, threadId = aliceThreadId, notify = false, updateThread = false)
 
-    SignalDatabase.rawDatabase.withinTransaction {
+    SignalDatabase.writableDatabase.withinTransaction {
       assertThat(SignalDatabase.messages.getMessageCountForThread(aliceThreadId)).isEqualTo(16)
       assertThat(SignalDatabase.messages.getMessageCountForThread(groupThreadId)).isEqualTo(10)
     }
@@ -704,6 +704,7 @@ class SyncMessageProcessorTest_synchronizeDeleteForMe {
       archiveCdn = this.archiveCdn,
       thumbnailRestoreState = this.thumbnailRestoreState,
       archiveTransferState = this.archiveTransferState,
+      archiveThumbnailTransferState = this.archiveThumbnailTransferState,
       uuid = uuid,
       quoteTargetContentType = this.quoteTargetContentType,
       metadata = null
@@ -723,7 +724,8 @@ class SyncMessageProcessorTest_synchronizeDeleteForMe {
       incrementalDigestChunkSize = this.incrementalMacChunkSize,
       dataSize = this.size,
       uploadTimestamp = uploadTimestamp,
-      blurHash = this.blurHash?.hash
+      blurHash = this.blurHash?.hash,
+      audioHash = this.audioHash?.hash
     )
   }
 }

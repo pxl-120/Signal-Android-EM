@@ -13,7 +13,6 @@ import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
-import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.ActivityResult
 import androidx.activity.result.ActivityResultLauncher
 import androidx.compose.foundation.layout.fillMaxSize
@@ -42,7 +41,7 @@ import org.signal.core.util.nullIfBlank
 import org.thoughtcrime.securesms.PassphraseRequiredActivity
 import org.thoughtcrime.securesms.PushContactSelectionActivity
 import org.thoughtcrime.securesms.R
-import org.thoughtcrime.securesms.components.settings.conversation.ConversationSettingsEvent
+import org.thoughtcrime.securesms.components.settings.conversation.ConversationSettingsAction
 import org.thoughtcrime.securesms.contacts.SelectedContact
 import org.thoughtcrime.securesms.database.model.GroupRecord
 import org.thoughtcrime.securesms.groups.GroupId
@@ -69,18 +68,17 @@ class AddMembersActivity : PassphraseRequiredActivity() {
 
     fun createIntent(
       context: Context,
-      event: ConversationSettingsEvent.AddMembersToGroup
+      action: ConversationSettingsAction.AddMembersToGroup
     ): Intent {
       return Intent(context, AddMembersActivity::class.java).apply {
-        putExtra(EXTRA_GROUP_ID, event.groupId)
-        putExtra(EXTRA_SELECTION_LIMITS, event.selectionLimits)
-        putParcelableArrayListExtra(EXTRA_PRESELECTED_RECIPIENTS, ArrayList(event.groupMembersWithoutSelf))
+        putExtra(EXTRA_GROUP_ID, action.groupId)
+        putExtra(EXTRA_SELECTION_LIMITS, action.selectionLimits)
+        putParcelableArrayListExtra(EXTRA_PRESELECTED_RECIPIENTS, ArrayList(action.groupMembersWithoutSelf))
       }
     }
   }
 
   override fun onCreate(savedInstanceState: Bundle?, ready: Boolean) {
-    enableEdgeToEdge()
     super.onCreate(savedInstanceState, ready)
 
     setContent {
@@ -165,7 +163,6 @@ private fun AddMembersScreenUi(
 
   RecipientPickerScaffold(
     title = title,
-    forceSplitPane = uiState.forceSplitPane,
     onNavigateUpClick = callbacks::onBackPressed,
     topAppBarActions = {},
     snackbarHostState = remember { SnackbarHostState() },
@@ -320,7 +317,6 @@ private fun AddMembersScreenPreview() {
   Previews.Preview {
     AddMembersScreenUi(
       uiState = AddMembersUiState(
-        forceSplitPane = false,
         selectionLimits = SelectionLimits.NO_LIMITS
       ),
       callbacks = AddMembersUiCallbacks.Empty

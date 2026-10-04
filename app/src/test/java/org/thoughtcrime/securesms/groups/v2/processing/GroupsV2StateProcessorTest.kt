@@ -27,6 +27,7 @@ import org.robolectric.annotation.Config
 import org.signal.core.models.ServiceId.ACI
 import org.signal.core.models.ServiceId.PNI
 import org.signal.core.util.Hex.fromStringCondensed
+import org.signal.core.util.groups.GroupNotAMemberException
 import org.signal.core.util.logging.Log
 import org.signal.libsignal.protocol.logging.SignalProtocolLoggerProvider
 import org.signal.libsignal.zkgroup.VerificationFailedException
@@ -53,7 +54,6 @@ import org.thoughtcrime.securesms.database.setNewDescription
 import org.thoughtcrime.securesms.database.setNewTitle
 import org.thoughtcrime.securesms.dependencies.AppDependencies
 import org.thoughtcrime.securesms.groups.GroupId
-import org.thoughtcrime.securesms.groups.GroupNotAMemberException
 import org.thoughtcrime.securesms.groups.GroupsV2Authorization
 import org.thoughtcrime.securesms.groups.v2.ProfileKeySet
 import org.thoughtcrime.securesms.groups.v2.processing.GroupsV2StateProcessor.ProfileAndMessageHelper
@@ -588,6 +588,42 @@ class GroupsV2StateProcessorTest {
       }
 
     verify { groupTable.create(masterKey, result.latestServer!!, null) }
+  }
+
+  @Test
+  fun `when local state is a join-via-link placeholder containing only self, then fetch full first state including other members`() {
+    given {
+      localState(
+        revision = 1,
+        members = listOf(member(selfAci)),
+        isPlaceholderGroup = true
+      )
+      changeSet {
+        changeLog(2) {
+          fullSnapshot(
+            title = "Breaking Signal for Science",
+            members = listOf(member(otherAci), member(selfAci, joinedAt = 2))
+          )
+        }
+      }
+      apiCallParameters(requestedRevision = 2, includeFirst = true)
+      joinedAtRevision = 2
+      expectTableUpdate = true
+    }
+
+    val result = processor.updateLocalGroupToRevision(
+      targetRevision = GroupsV2StateProcessor.LATEST,
+      timestamp = 0
+    )
+
+    assertThat(result.updateStatus, "local should update to server")
+      .isEqualTo(GroupUpdateResult.UpdateStatus.GROUP_UPDATED)
+    assertThat(result.latestServer)
+      .isNotNull()
+      .transform { it.members }
+      .contains(member(otherAci))
+
+    verify { groupTable.update(masterKey, result.latestServer!!, null) }
   }
 
   @Test

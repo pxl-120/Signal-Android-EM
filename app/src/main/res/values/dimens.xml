@@ -48,6 +48,7 @@
     <dimen name="media_bubble_remove_button_size">24dp</dimen>
     <dimen name="media_bubble_edit_button_size">24dp</dimen>
     <dimen name="media_bubble_default_dimens">210dp</dimen>
+    <dimen name="shared_contact_bubble_min_width">240dp</dimen>
     <dimen name="media_bubble_min_width_solo">150dp</dimen>
     <dimen name="media_bubble_min_width_with_content">240dp</dimen>
     <dimen name="media_bubble_max_width">240dp</dimen>
@@ -226,8 +227,6 @@
 
     <dimen name="safety_number_qr_peek">24dp</dimen>
 
-    <dimen name="video_timeline_height_expanded">44dp</dimen>
-    <dimen name="video_timeline_height_collapsed">1dp</dimen>
     <dimen name="image_editor_hud_tool_filled_circle_diameter">40dp</dimen>
     <dimen name="image_editor_hud_tool_filled_circle_padding">6dp</dimen>
     <dimen name="image_editor_hud_tool_invisible_circle_diameter">40dp</dimen>
@@ -243,9 +242,6 @@
     <dimen name="CallScreenParticipantItem__margin_bottom">0dp</dimen>
 
     <dimen name="chat_folder_row_height">64dp</dimen>
-
-
-    <dimen name="donation_pill_max_width">180dp</dimen>
 
     <dimen name="call_screen_overflow_item_size">72dp</dimen>
 

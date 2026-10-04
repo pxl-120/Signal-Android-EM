@@ -14,7 +14,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.fragment.findNavController
-import androidx.preference.PreferenceManager
 import org.signal.core.ui.compose.ComposeFragment
 import org.signal.core.ui.compose.DayNightPreviews
 import org.signal.core.ui.compose.Dialogs
@@ -27,7 +26,6 @@ import org.signal.core.ui.compose.Texts
 import org.signal.core.util.bytes
 import org.signal.mediasend.SentMediaQuality
 import org.thoughtcrime.securesms.R
-import org.thoughtcrime.securesms.compose.rememberStatusBarColorNestedScrollModifier
 import org.thoughtcrime.securesms.util.AttachmentUtil
 import org.thoughtcrime.securesms.util.navigation.safeNavigate
 import org.thoughtcrime.securesms.webrtc.CallDataMode
@@ -37,9 +35,8 @@ class DataAndStorageSettingsFragment : ComposeFragment() {
 
   private val viewModel: DataAndStorageSettingsViewModel by viewModels(
     factoryProducer = {
-      val preferences = PreferenceManager.getDefaultSharedPreferences(requireContext())
       val repository = DataAndStorageSettingsRepository()
-      DataAndStorageSettingsViewModel.Factory(preferences, repository)
+      DataAndStorageSettingsViewModel.Factory(repository)
     }
   )
 
@@ -135,7 +132,6 @@ private fun DataAndStorageSettingsScreen(
     LazyColumn(
       modifier = Modifier
         .padding(paddingValues)
-        .then(rememberStatusBarColorNestedScrollModifier())
     ) {
       item {
         Rows.TextRow(

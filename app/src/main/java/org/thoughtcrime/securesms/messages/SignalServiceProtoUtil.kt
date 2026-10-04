@@ -74,11 +74,14 @@ object SignalServiceProtoUtil {
   val DataMessage.isExpirationUpdate: Boolean
     get() = flags != null && flags!! and DataMessage.Flags.EXPIRATION_TIMER_UPDATE.value != 0
 
+  val DataMessage.isProfileKeyUpdate: Boolean
+    get() = flags != null && flags!! and DataMessage.Flags.PROFILE_KEY_UPDATE.value != 0
+
   val DataMessage.hasRemoteDelete: Boolean
     get() = delete != null && delete!!.targetSentTimestamp != null
 
   val DataMessage.isGroupV2Update: Boolean
-    get() = !hasRenderableContent && hasSignedGroupChange
+    get() = hasSignedGroupChange && !hasRenderableContent
 
   val DataMessage?.hasGroupContext: Boolean
     get() = this?.groupV2?.masterKey.isNotEmpty()
@@ -175,7 +178,14 @@ object SignalServiceProtoUtil {
   }
 
   fun List<AttachmentPointer>.toPointersWithinLimit(): List<Attachment> {
-    return mapNotNull { it.toPointer() }.take(RemoteConfig.maxAttachmentCount)
+    val pointers = mapNotNull { it.toPointer() }.take(RemoteConfig.maxAttachmentCount)
+
+    val voiceNote = pointers.firstOrNull { it.voiceNote }
+    return if (voiceNote != null) {
+      listOf(voiceNote)
+    } else {
+      pointers
+    }
   }
 
   fun AttachmentPointer.toPointer(stickerLocator: StickerLocator? = null): Attachment? {

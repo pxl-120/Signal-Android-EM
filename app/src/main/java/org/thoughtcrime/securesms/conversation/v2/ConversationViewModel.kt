@@ -44,6 +44,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.rx3.asFlow
 import org.signal.core.models.ServiceId
+import org.signal.core.models.database.StickerRecord
 import org.signal.core.util.concurrent.SignalDispatchers
 import org.signal.core.util.logging.Log
 import org.signal.core.util.orNull
@@ -74,7 +75,6 @@ import org.thoughtcrime.securesms.database.model.MessageId
 import org.thoughtcrime.securesms.database.model.MessageRecord
 import org.thoughtcrime.securesms.database.model.MmsMessageRecord
 import org.thoughtcrime.securesms.database.model.ReactionRecord
-import org.thoughtcrime.securesms.database.model.StickerRecord
 import org.thoughtcrime.securesms.database.model.StoryViewState
 import org.thoughtcrime.securesms.database.model.databaseprotos.BodyRangeList
 import org.thoughtcrime.securesms.dependencies.AppDependencies
@@ -97,7 +97,6 @@ import org.thoughtcrime.securesms.sms.MessageSender
 import org.thoughtcrime.securesms.util.BubbleUtil
 import org.thoughtcrime.securesms.util.ConversationUtil
 import org.thoughtcrime.securesms.util.NetworkUtil
-import org.thoughtcrime.securesms.util.TextSecurePreferences
 import org.thoughtcrime.securesms.util.hasGiftBadge
 import org.thoughtcrime.securesms.util.rx.RxStore
 import org.thoughtcrime.securesms.wallpaper.ChatWallpaper
@@ -153,7 +152,7 @@ class ConversationViewModel(
 
   val groupMemberServiceIds: Observable<List<ServiceId>> = recipientRepository
     .groupRecord
-    .filter { it.isPresent && it.get().isV2Group }
+    .filter { it.isPresent && it.get().hasV2GroupProperties }
     .map { it.get().requireV2GroupProperties().getMemberServiceIds() }
     .distinctUntilChanged()
     .observeOn(AndroidSchedulers.mainThread())
@@ -301,6 +300,16 @@ class ConversationViewModel(
       )
     }
 
+    disposables += recipientRepository
+      .groupRecord
+      .filter { it.isPresent && it.get().isV2Group }
+      .map { it.get().requireV2GroupProperties().memberLabelsByAci() }
+      .distinctUntilChanged()
+      .skip(1)
+      .subscribeBy(onNext = {
+        pagingController.onDataInvalidated()
+      })
+
     _inputReadyState = Observable.combineLatest(
       recipientRepository.conversationRecipient,
       recipientRepository.groupRecord
@@ -310,7 +319,7 @@ class ConversationViewModel(
         messageRequestState = messageRequestRepository.getMessageRequestState(recipient, threadId),
         groupRecord = groupRecord.orNull(),
         isClientExpired = SignalStore.misc.isClientDeprecated,
-        isUnauthorized = TextSecurePreferences.isUnauthorizedReceived(AppDependencies.application),
+        isUnauthorized = SignalStore.account.isUnauthorizedReceived,
         threadContainsSms = !recipient.isRegistered && !recipient.isPushGroup && !recipient.isSelf && messageRequestRepository.threadContainsSms(threadId)
       )
     }.doOnNext {
@@ -642,6 +651,13 @@ class ConversationViewModel(
     refreshIdentityRecords.onNext(Unit)
   }
 
+  fun refreshInputReadyState() {
+    val recipientId = recipientSnapshot?.id ?: return
+    viewModelScope.launch(Dispatchers.Default) {
+      Recipient.live(recipientId).refresh()
+    }
+  }
+
   fun updateIdentityRecords(): Completable {
     val state: IdentityRecordsState = identityRecordsStore.state
     if (state.recipient == null) {
@@ -729,12 +745,6 @@ class ConversationViewModel(
   fun setIsInActionMode(isInActionMode: Boolean) {
     internalBackPressedState.update {
       it.copy(isInActionMode = isInActionMode)
-    }
-  }
-
-  fun setIsMediaKeyboardShowing(isMediaKeyboardShowing: Boolean) {
-    internalBackPressedState.update {
-      it.copy(isMediaKeyboardShowing = isMediaKeyboardShowing)
     }
   }
 
@@ -839,12 +849,12 @@ class ConversationViewModel(
     data object Cancelled : PlaintextExportState
   }
 
+  /** A media keyboard is absent by design: KeyboardSheetScaffold registers its own back handler. */
   data class BackPressedState(
     val isReactionDelegateShowing: Boolean = false,
     val isSearchRequested: Boolean = false,
-    val isInActionMode: Boolean = false,
-    val isMediaKeyboardShowing: Boolean = false
+    val isInActionMode: Boolean = false
   ) {
-    fun shouldHandleBackPressed() = isSearchRequested || isReactionDelegateShowing || isInActionMode || isMediaKeyboardShowing
+    fun shouldHandleBackPressed() = isSearchRequested || isReactionDelegateShowing || isInActionMode
   }
 }

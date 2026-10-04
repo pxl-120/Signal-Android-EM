@@ -11,7 +11,9 @@ import kotlinx.collections.immutable.toImmutableList
 import org.signal.core.models.ServiceId
 import org.signal.core.models.ServiceId.ACI
 import org.signal.core.models.ServiceId.PNI
+import org.signal.core.ui.fonts.SignalSymbols
 import org.signal.core.util.BidiUtil
+import org.signal.core.util.UsernameUtil.isValidUsernameForSearch
 import org.signal.core.util.Util
 import org.signal.core.util.UuidUtil
 import org.signal.core.util.isNotNullOrBlank
@@ -43,7 +45,6 @@ import org.thoughtcrime.securesms.database.model.ProfileAvatarFileDetails
 import org.thoughtcrime.securesms.database.model.RecipientRecord
 import org.thoughtcrime.securesms.database.model.databaseprotos.RecipientExtras
 import org.thoughtcrime.securesms.dependencies.AppDependencies
-import org.thoughtcrime.securesms.fonts.SignalSymbols
 import org.thoughtcrime.securesms.groups.GroupId
 import org.thoughtcrime.securesms.keyvalue.SignalStore
 import org.thoughtcrime.securesms.notifications.NotificationChannels
@@ -53,7 +54,6 @@ import org.thoughtcrime.securesms.recipients.Recipient.Companion.external
 import org.thoughtcrime.securesms.service.webrtc.links.CallLinkRoomId
 import org.thoughtcrime.securesms.util.SignalE164Util
 import org.thoughtcrime.securesms.util.SpanUtil
-import org.thoughtcrime.securesms.util.UsernameUtil.isValidUsernameForSearch
 import org.thoughtcrime.securesms.util.ViewUtil
 import org.thoughtcrime.securesms.wallpaper.ChatWallpaper
 import org.whispersystems.signalservice.api.push.SignalServiceAddress
@@ -85,6 +85,7 @@ class Recipient(
   val isActiveGroup: Boolean = false,
   val isSelf: Boolean = false,
   val isBlocked: Boolean = false,
+  val blockedAt: Long = 0,
   val muteUntil: Long = 0,
   val messageVibrate: VibrateState = VibrateState.DEFAULT,
   val callVibrate: VibrateState = VibrateState.DEFAULT,
@@ -108,9 +109,10 @@ class Recipient(
   private val sealedSenderAccessModeValue: SealedSenderAccessMode = SealedSenderAccessMode.UNKNOWN,
   private val capabilities: RecipientRecord.Capabilities = RecipientRecord.Capabilities.UNKNOWN,
   val storageId: ByteArray? = null,
-  val mentionSetting: NotificationSetting = NotificationSetting.ALWAYS_NOTIFY,
-  private val callNotificationSettingValue: NotificationSetting = NotificationSetting.ALWAYS_NOTIFY,
-  private val replyNotificationSettingValue: NotificationSetting = NotificationSetting.ALWAYS_NOTIFY,
+  private val mentionSettingValue: NotificationSetting = NotificationSetting.SYSTEM_DEFAULT,
+  private val callNotificationSettingValue: NotificationSetting = NotificationSetting.SYSTEM_DEFAULT,
+  private val replyNotificationSettingValue: NotificationSetting = NotificationSetting.SYSTEM_DEFAULT,
+  private val unreadReminderValue: NotificationSetting = NotificationSetting.SYSTEM_DEFAULT,
   private val wallpaperValue: ChatWallpaper? = null,
   private val chatColorsValue: ChatColors? = null,
   val avatarColor: AvatarColor = AvatarColor.UNKNOWN,
@@ -128,6 +130,11 @@ class Recipient(
   val phoneNumberSharing: PhoneNumberSharingState = PhoneNumberSharingState.UNKNOWN,
   val nickname: ProfileName = ProfileName.EMPTY,
   val note: String? = null,
+  /**
+   * A name supplied by a third party through a shared contact card, for someone we would otherwise
+   * have no name for. Deliberately ranks below [profileName], so a real profile always wins.
+   */
+  val sharedName: ProfileName = ProfileName.EMPTY,
   val keyTransparencyData: ByteArray? = null
 ) {
 
@@ -304,6 +311,7 @@ class Recipient(
   val participantAcis: List<ServiceId>
     get() {
       return groupRecord
+        .filter { it.hasV2GroupProperties }
         .map { it.requireV2GroupProperties().getMemberServiceIds().toImmutableList() }
         .orElse(emptyList<ServiceId>().toImmutableList())
     }
@@ -336,13 +344,21 @@ class Recipient(
   /** The notification channel, if both set and supported by the system. Otherwise null. */
   val notificationChannel: String? = if (!NotificationChannels.supported()) null else notificationChannelValue
 
+  /** Whether mentions should break through mute for this recipient. */
+  val mentionSetting: NotificationSetting
+    get() = NotificationSetting.resolve(mentionSettingValue, SignalStore.settings.allowMentionsWhileMuted)
+
   /** Whether calls should break through mute for this recipient. */
   val callNotificationSetting: NotificationSetting
-    get() = if (SignalStore.labs.muteBreakthroughNotifications) callNotificationSettingValue else NotificationSetting.ALWAYS_NOTIFY
+    get() = NotificationSetting.resolve(callNotificationSettingValue, SignalStore.settings.allowCallsWhileMuted)
 
-  /** Whether replies should break through mute for this recipient. Only applicable to groups. */
+  /** Whether replies should break through mute for this recipient. */
   val replyNotificationSetting: NotificationSetting
-    get() = if (groupIdValue == null) NotificationSetting.DO_NOT_NOTIFY else if (SignalStore.labs.muteBreakthroughNotifications) replyNotificationSettingValue else mentionSetting
+    get() = if (groupIdValue == null) NotificationSetting.DO_NOT_NOTIFY else NotificationSetting.resolve(replyNotificationSettingValue, SignalStore.settings.allowRepliesWhileMuted)
+
+  /** Whether this conversation's unread content should be included in the periodic unread reminder */
+  val unreadReminderSetting: NotificationSetting
+    get() = NotificationSetting.resolve(unreadReminderValue, SignalStore.settings.unreadReminderEnabled)
 
   /** The state around whether we can send sealed sender to this user. */
   val sealedSenderAccessMode: SealedSenderAccessMode = if (pni.isPresent && pni == serviceId) {
@@ -353,6 +369,9 @@ class Recipient(
 
   /** The user's capability to receive username sync messages */
   val usernameSyncMessagesCapability: Capability = capabilities.usernameSyncMessages
+
+  /** The user's capability to participate on an account that has no phone number */
+  val optionalPhoneNumberCapability: Capability = capabilities.optionalPhoneNumber
 
   /** The wallpaper to render as the chat background, if present. */
   val wallpaper: ChatWallpaper?
@@ -540,7 +559,8 @@ class Recipient(
     return getGroupName(context).isNotNullOrBlank() ||
       nickname.toString().isNotNullOrBlank() ||
       systemContactName.isNotNullOrBlank() ||
-      profileName.toString().isNotNullOrBlank()
+      profileName.toString().isNotNullOrBlank() ||
+      sharedName.toString().isNotNullOrBlank()
   }
 
   fun isMatch(query: String): Boolean {
@@ -556,6 +576,8 @@ class Recipient(
       systemProfileName.givenName,
       profileName.toString(),
       profileName.givenName,
+      sharedName.toString(),
+      sharedName.givenName,
       username.orElse("")
     ).firstOrNull { it.isNotNullOrBlank() }?.lowercase()
 
@@ -576,12 +598,24 @@ class Recipient(
     return BidiUtil.isolateBidi(name)
   }
 
-  fun hasNonUsernameDisplayName(context: Context): Boolean {
-    return getNameFromLocalData(context).isNotNullOrBlank()
+  val hasUsernameOrSharedName: Boolean
+    get() = username.isPresent || !sharedName.isEmpty
+
+  /** Excludes shared name and username. */
+  fun hasPersistentDisplayName(context: Context): Boolean {
+    return getNameFromLocalData(context, includeSharedName = false).isNotNullOrBlank()
+  }
+
+  /** Excludes the e164 and email, which a shared name outranks for display. */
+  fun hasDisplayNameOutrankingSharedName(): Boolean {
+    return nickname.toString().isNotBlank() ||
+      systemContactName.isNotNullOrBlank() ||
+      systemProfileName.toString().isNotBlank() ||
+      profileName.toString().isNotBlank()
   }
 
   /** A full-length display name for this user, ignoring the username. */
-  private fun getNameFromLocalData(context: Context): String? {
+  private fun getNameFromLocalData(context: Context, includeSharedName: Boolean = true): String? {
     var name = getGroupName(context)
 
     if (name.isNullOrBlank()) {
@@ -594,6 +628,10 @@ class Recipient(
 
     if (name.isBlank()) {
       name = profileName.toString()
+    }
+
+    if (name.isBlank() && includeSharedName) {
+      name = sharedName.toString()
     }
 
     if (name.isBlank() && e164Value.isNotNullOrBlank()) {
@@ -652,6 +690,8 @@ class Recipient(
       systemProfileName.toString(),
       profileName.givenName,
       profileName.toString(),
+      sharedName.givenName,
+      sharedName.toString(),
       username.orElse(null),
       getDisplayName(context)
     ).firstOrNull { it.isNotNullOrBlank() }
@@ -660,7 +700,7 @@ class Recipient(
   }
 
   private fun getUnknownDisplayName(context: Context): String {
-    return if (registered == RegisteredState.NOT_REGISTERED) {
+    return if (!isResolving && registered == RegisteredState.NOT_REGISTERED) {
       context.getString(R.string.Recipient_deleted_account)
     } else {
       context.getString(R.string.Recipient_unknown)
@@ -729,6 +769,8 @@ class Recipient(
       FallbackAvatar.forTextOrDefault(systemContactName, avatarColor)
     } else if (!profileName.isEmpty) {
       FallbackAvatar.forTextOrDefault(profileName.toString(), avatarColor)
+    } else if (!sharedName.isEmpty) {
+      FallbackAvatar.forTextOrDefault(sharedName.toString(), avatarColor)
     } else {
       FallbackAvatar.Resource.Person(avatarColor)
     }
@@ -841,6 +883,7 @@ class Recipient(
       isResolving == other.isResolving &&
       isSelf == other.isSelf &&
       isBlocked == other.isBlocked &&
+      blockedAt == other.blockedAt &&
       muteUntil == other.muteUntil &&
       expiresInSeconds == other.expiresInSeconds &&
       profileAvatarFileDetails == other.profileAvatarFileDetails &&
@@ -869,9 +912,10 @@ class Recipient(
       profileAvatar == other.profileAvatar &&
       notificationChannelValue == other.notificationChannelValue &&
       sealedSenderAccessModeValue == other.sealedSenderAccessModeValue &&
-      mentionSetting == other.mentionSetting &&
+      mentionSettingValue == other.mentionSettingValue &&
       callNotificationSettingValue == other.callNotificationSettingValue &&
       replyNotificationSettingValue == other.replyNotificationSettingValue &&
+      unreadReminderValue == other.unreadReminderValue &&
       wallpaperValue == other.wallpaperValue &&
       chatColorsValue == other.chatColorsValue &&
       avatarColor == other.avatarColor &&
@@ -885,6 +929,7 @@ class Recipient(
       phoneNumberSharing == other.phoneNumberSharing &&
       nickname == other.nickname &&
       note == other.note &&
+      sharedName == other.sharedName &&
       keyTransparencyData.contentEquals(other.keyTransparencyData)
   }
 

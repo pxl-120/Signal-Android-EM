@@ -10,12 +10,15 @@ import org.signal.core.util.ThreadUtil;
 import org.signal.core.util.concurrent.SignalExecutors;
 import org.signal.core.util.logging.Log;
 import org.thoughtcrime.securesms.R;
+import org.thoughtcrime.securesms.components.emoji.CustomEmojiPageModel;
+import org.thoughtcrime.securesms.components.emoji.CustomEmojiRegistry;
 import org.thoughtcrime.securesms.components.emoji.RecentEmojiPageModel;
 import org.thoughtcrime.securesms.database.SignalDatabase;
 import org.thoughtcrime.securesms.database.model.MessageId;
 import org.thoughtcrime.securesms.database.model.ReactionRecord;
-import org.thoughtcrime.securesms.emoji.EmojiCategory;
-import org.thoughtcrime.securesms.emoji.EmojiSource;
+import org.signal.emoji.EmojiCategory;
+import org.signal.emoji.EmojiPageModel;
+import org.signal.emoji.EmojiSource;
 import org.thoughtcrime.securesms.reactions.ReactionDetails;
 import org.thoughtcrime.securesms.recipients.Recipient;
 import org.thoughtcrime.securesms.sms.MessageSender;
@@ -24,10 +27,6 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedList;
 import java.util.List;
-
-import org.thoughtcrime.securesms.components.emoji.CustomEmojiPageModel;
-import org.thoughtcrime.securesms.components.emoji.CustomEmojiRegistry;
-import org.thoughtcrime.securesms.components.emoji.EmojiPageModel;
 
 final class ReactWithAnyEmojiRepository {
 

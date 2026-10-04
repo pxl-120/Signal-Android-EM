@@ -70,6 +70,7 @@ import com.google.common.collect.Sets;
 import org.greenrobot.eventbus.EventBus;
 import org.greenrobot.eventbus.Subscribe;
 import org.greenrobot.eventbus.ThreadMode;
+import org.signal.core.ui.fonts.SignalSymbols;
 import org.signal.core.ui.util.ThemeUtil;
 import org.signal.core.ui.view.Stub;
 import org.signal.core.util.BidiUtil;
@@ -114,13 +115,13 @@ import org.thoughtcrime.securesms.conversation.v2.items.SenderNameWithLabelView;
 import org.thoughtcrime.securesms.conversation.v2.items.V2ConversationItemUtils;
 import org.thoughtcrime.securesms.database.AttachmentTable;
 import org.thoughtcrime.securesms.database.MediaTable;
+import org.thoughtcrime.securesms.database.model.InMemoryMessageRecord;
 import org.thoughtcrime.securesms.database.model.MessageRecord;
 import org.thoughtcrime.securesms.database.model.MmsMessageRecord;
 import org.thoughtcrime.securesms.database.model.Quote;
 import org.thoughtcrime.securesms.database.model.databaseprotos.MessageExtras;
 import org.thoughtcrime.securesms.dependencies.AppDependencies;
 import org.thoughtcrime.securesms.events.PartProgressEvent;
-import org.thoughtcrime.securesms.fonts.SignalSymbols;
 import org.thoughtcrime.securesms.giph.mp4.GiphyMp4PlaybackPolicy;
 import org.thoughtcrime.securesms.giph.mp4.GiphyMp4PlaybackPolicyEnforcer;
 import org.thoughtcrime.securesms.jobs.AttachmentDownloadJob;
@@ -128,7 +129,7 @@ import org.thoughtcrime.securesms.keyvalue.SignalStore;
 import org.thoughtcrime.securesms.linkpreview.LinkPreview;
 import org.thoughtcrime.securesms.mediapreview.MediaIntentFactory;
 import org.thoughtcrime.securesms.mediapreview.MediaPreviewCache;
-import org.thoughtcrime.securesms.mediapreview.MediaPreviewV2Fragment;
+import org.thoughtcrime.securesms.mediapreview.MediaPreviewFragment;
 import org.thoughtcrime.securesms.mms.ImageSlide;
 import org.thoughtcrime.securesms.mms.PartAuthority;
 import org.thoughtcrime.securesms.mms.Slide;
@@ -690,11 +691,15 @@ public final class ConversationItem extends RelativeLayout implements BindableCo
     }
 
     if (hasSharedContact(messageRecord)) {
-      int contactWidth   = sharedContactStub.get().getMeasuredWidth();
-      int availableWidth = getAvailableMessageBubbleWidth(sharedContactStub.get());
+      int contactWidth = sharedContactStub.get().getMeasuredWidth();
 
-      if (contactWidth != availableWidth) {
-        sharedContactStub.get().getLayoutParams().width = availableWidth;
+      int maxWidth = getMaxBubbleWidth() - ViewUtil.getLeftMargin(sharedContactStub.get()) - ViewUtil.getRightMargin(sharedContactStub.get());
+      int minWidth = Math.min(readDimen(R.dimen.shared_contact_bubble_min_width), maxWidth);
+
+      int targetWidth = Util.clamp(sharedContactStub.get().getNaturalContentWidth(), minWidth, maxWidth);
+
+      if (contactWidth != targetWidth) {
+        sharedContactStub.get().getLayoutParams().width = targetWidth;
         needsMeasure                                    = true;
       }
     }
@@ -892,16 +897,20 @@ public final class ConversationItem extends RelativeLayout implements BindableCo
     }
   }
 
-  private static int getProjectionTop(@NonNull View child) {
-    Projection projection = Projection.relativeToViewRoot(child, null);
-    int        y          = (int) projection.getY();
+  /**
+   * Multiselect boundaries are drawn by an item decoration, so they are relative to the list
+   * rather than to the view root.
+   */
+  private int getProjectionTop(@NonNull View child) {
+    Projection projection = Projection.relativeToParent(this, child, null);
+    int        y          = (int) projection.getY() + getTop();
     projection.release();
     return y;
   }
 
-  private static int getProjectionBottom(@NonNull View child) {
-    Projection projection = Projection.relativeToViewRoot(child, null);
-    int        bottom     = (int) projection.getY() + projection.getHeight();
+  private int getProjectionBottom(@NonNull View child) {
+    Projection projection = Projection.relativeToParent(this, child, null);
+    int        bottom     = (int) projection.getY() + projection.getHeight() + getTop();
     projection.release();
     return bottom;
   }
@@ -1198,7 +1207,26 @@ public final class ConversationItem extends RelativeLayout implements BindableCo
     bodyText.setOverflowText(null);
     bodyText.setMaxLength(-1);
 
-    if (RemoteConfig.receiveAdminDelete() && conversationMessage.getDeletedByRecipient() != null) {
+    if (messageRecord instanceof InMemoryMessageRecord.DeletedMessageTombstone) {
+      String          deletedMessage = context.getString(R.string.ConversationItem_delete_for_everyone_question);
+      SpannableString italics        = new SpannableString(deletedMessage);
+      italics.setSpan(new StyleSpan(android.graphics.Typeface.ITALIC), 0, deletedMessage.length(), Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
+      int textColor = hasWallpaper ? colorizer.getOutgoingDeleteTextColor(context)
+                                   : ContextCompat.getColor(context, R.color.signal_text_primary);
+      italics.setSpan(new ForegroundColorSpan(textColor),
+                      0,
+                      deletedMessage.length(),
+                      Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+
+      bodyText.setText(italics);
+      bodyText.setVisibility(View.VISIBLE);
+      bodyText.setOverflowText(null);
+      bodyText.setOnClickListener(v -> {
+        if (eventListener != null) {
+          eventListener.onInMemoryMessageClicked((InMemoryMessageRecord) messageRecord);
+        }
+      });
+    } else if (conversationMessage.getDeletedByRecipient() != null) {
       bodyText.setText(getDeletedMessageText(conversationMessage, hasWallpaper));
       bodyText.setVisibility(View.VISIBLE);
       bodyText.setOverflowText(null);
@@ -1362,7 +1390,7 @@ public final class ConversationItem extends RelativeLayout implements BindableCo
       if (joinCallLinkStub.resolved()) joinCallLinkStub.get().setVisibility(View.GONE);
       paymentViewStub.setVisibility(View.GONE);
 
-      sharedContactStub.get().setContact(((MmsMessageRecord) messageRecord).getSharedContacts().get(0), requestManager, locale);
+      sharedContactStub.get().setContact(((MmsMessageRecord) messageRecord).getSharedContacts().get(0), conversationMessage.getSharedContactPresentation(), requestManager, locale);
       sharedContactStub.get().setEventListener(sharedContactEventListener);
       sharedContactStub.get().setOnClickListener(sharedContactClickListener);
       sharedContactStub.get().setOnLongClickListener(passthroughClickListener);
@@ -2641,7 +2669,9 @@ public final class ConversationItem extends RelativeLayout implements BindableCo
       return null;
     }
 
-    return Projection.relativeToViewRoot(bodyBubble, bodyBubbleCorners)
+    return Projection.relativeToParent(this, bodyBubble, bodyBubbleCorners)
+                     .translateX(getLeft())
+                     .translateY(getTop())
                      .translateX(bodyBubble.getTranslationX())
                      .translateX(getTranslationX())
                      .scale(bodyBubble.getScaleX());
@@ -2749,18 +2779,18 @@ public final class ConversationItem extends RelativeLayout implements BindableCo
     }
 
     @Override
-    public void onInviteClicked(@NonNull List<Recipient> choices) {
+    public void onInviteClicked(@NonNull Contact contact) {
       if (eventListener != null && batchSelected.isEmpty()) {
-        eventListener.onInviteSharedContactClicked(choices);
+        eventListener.onInviteSharedContactClicked(contact);
       } else {
         passthroughClickListener.onClick(sharedContactStub.get());
       }
     }
 
     @Override
-    public void onMessageClicked(@NonNull List<Recipient> choices) {
+    public void onMessageClicked(@NonNull Contact contact, @NonNull List<Recipient> choices) {
       if (eventListener != null && batchSelected.isEmpty()) {
-        eventListener.onMessageSharedContactClicked(choices);
+        eventListener.onMessageSharedContactClicked(contact, choices);
       } else {
         passthroughClickListener.onClick(sharedContactStub.get());
       }
@@ -2937,7 +2967,7 @@ public final class ConversationItem extends RelativeLayout implements BindableCo
         performClick();
       } else if (eventListener != null && hasSticker(messageRecord)) {
         //noinspection ConstantConditions
-        eventListener.onStickerClicked(((MmsMessageRecord) messageRecord).getSlideDeck().getStickerSlide().asAttachment().stickerLocator);
+        eventListener.onStickerClicked(((MmsMessageRecord) messageRecord).getSlideDeck().getStickerSlide());
       }
     }
   }
@@ -2948,7 +2978,7 @@ public final class ConversationItem extends RelativeLayout implements BindableCo
         performClick();
       } else if (!canPlayContent && mediaItem != null && eventListener != null) {
         eventListener.onPlayInlineContent(conversationMessage);
-      } else if (MediaPreviewV2Fragment.isContentTypeSupported(slide.getContentType()) && slide.getDisplayUri() != null) {
+      } else if (MediaPreviewFragment.isContentTypeSupported(slide.getContentType()) && slide.getDisplayUri() != null) {
         AttachmentDownloadJob.downloadAttachmentIfNeeded((DatabaseAttachment) slide.asAttachment());
         launchMediaPreview(v, slide);
       } else if (slide.getUri() != null) {

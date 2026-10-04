@@ -1,10 +1,6 @@
 package org.thoughtcrime.securesms.push
 
 import android.content.Context
-import android.net.ConnectivityManager
-import android.net.ProxyInfo
-import android.net.Uri
-import androidx.core.content.ContextCompat
 import com.google.i18n.phonenumbers.PhoneNumberUtil
 import okhttp3.CipherSuite
 import okhttp3.ConnectionSpec
@@ -13,6 +9,13 @@ import okhttp3.Interceptor
 import okhttp3.TlsVersion
 import org.signal.core.util.Base64
 import org.signal.core.util.logging.Log
+import org.signal.network.config.SignalCdnUrl
+import org.signal.network.config.SignalCdsiUrl
+import org.signal.network.config.SignalServiceConfiguration
+import org.signal.network.config.SignalServiceUrl
+import org.signal.network.config.SignalStorageUrl
+import org.signal.network.config.SignalSvr2Url
+import org.signal.network.config.TrustStore
 import org.thoughtcrime.securesms.BuildConfig
 import org.thoughtcrime.securesms.keyvalue.SettingsValues
 import org.thoughtcrime.securesms.keyvalue.SignalStore
@@ -24,14 +27,6 @@ import org.thoughtcrime.securesms.net.SequentialDns
 import org.thoughtcrime.securesms.net.StandardUserAgentInterceptor
 import org.thoughtcrime.securesms.net.StaticDns
 import org.thoughtcrime.securesms.net.StorageServiceSizeLoggingInterceptor
-import org.whispersystems.signalservice.api.push.TrustStore
-import org.whispersystems.signalservice.internal.configuration.HttpProxy
-import org.whispersystems.signalservice.internal.configuration.SignalCdnUrl
-import org.whispersystems.signalservice.internal.configuration.SignalCdsiUrl
-import org.whispersystems.signalservice.internal.configuration.SignalServiceConfiguration
-import org.whispersystems.signalservice.internal.configuration.SignalServiceUrl
-import org.whispersystems.signalservice.internal.configuration.SignalStorageUrl
-import org.whispersystems.signalservice.internal.configuration.SignalSvr2Url
 import java.io.IOException
 import java.util.Optional
 
@@ -139,33 +134,6 @@ class SignalServiceNetworkAccess(context: Context) {
       .build()
 
     private val APP_CONNECTION_SPEC = ConnectionSpec.MODERN_TLS
-
-    @Suppress("DEPRECATION")
-    private fun getSystemHttpProxy(context: Context): HttpProxy? {
-      val connectivityManager = ContextCompat.getSystemService(context, ConnectivityManager::class.java) ?: return null
-
-      val proxyInfo = connectivityManager
-        .activeNetwork
-        ?.let { connectivityManager.getLinkProperties(it)?.httpProxy }
-
-      return proxyInfo.toApplicableSystemHttpProxy()
-    }
-
-    fun ProxyInfo?.toApplicableSystemHttpProxy(): HttpProxy? {
-      return this
-        ?.takeIf { !it.exclusionList.contains(BuildConfig.SIGNAL_URL.stripProtocol()) }
-        // NB: Edit carefully, dear reader, as the line below is written from hard won experience.
-        // It turns out, that despite being documented *nowhere*, if a PAC file is set
-        //   as the system proxy, proxyInfo.host will return "localhost" and proxyInfo.port
-        //   will return -1.
-        // I learnt this by reading the AOSP source code for ProxyInfo:
-        //   https://android.googlesource.com/platform/frameworks/base/+/4696ee4/core/java/android/net/ProxyInfo.java#107
-        // So, if we do not explicitly check that a PAC file is not set, the proxy
-        //   we pass to libsignal may be syntactically invalid, and the user may be
-        //   rendered unable to connect.
-        ?.takeIf { it.pacFileUrl == Uri.EMPTY }
-        ?.let { proxy -> HttpProxy(proxy.host, proxy.port) }
-    }
   }
 
   private val serviceTrustStore: TrustStore = SignalServiceTrustStore(context)
@@ -221,7 +189,6 @@ class SignalServiceNetworkAccess(context: Context) {
     networkInterceptors = interceptors,
     dns = Optional.of(DNS),
     signalProxy = Optional.empty(),
-    systemHttpProxy = Optional.empty(),
     zkGroupServerPublicParams = zkGroupServerPublicParams,
     genericServerPublicParams = genericServerPublicParams,
     backupServerPublicParams = backupServerPublicParams,
@@ -281,7 +248,6 @@ class SignalServiceNetworkAccess(context: Context) {
     networkInterceptors = interceptors,
     dns = Optional.of(DNS),
     signalProxy = if (SignalStore.proxy.isProxyEnabled) Optional.ofNullable(SignalStore.proxy.proxy) else Optional.empty(),
-    systemHttpProxy = Optional.ofNullable(getSystemHttpProxy(context)),
     zkGroupServerPublicParams = zkGroupServerPublicParams,
     genericServerPublicParams = genericServerPublicParams,
     backupServerPublicParams = backupServerPublicParams,
@@ -354,7 +320,6 @@ class SignalServiceNetworkAccess(context: Context) {
       networkInterceptors = interceptors,
       dns = Optional.of(DNS),
       signalProxy = Optional.empty(),
-      systemHttpProxy = Optional.empty(),
       zkGroupServerPublicParams = zkGroupServerPublicParams,
       genericServerPublicParams = genericServerPublicParams,
       backupServerPublicParams = backupServerPublicParams,

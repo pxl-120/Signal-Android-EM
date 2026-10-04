@@ -9,6 +9,8 @@ import android.widget.TextView;
 
 import androidx.annotation.NonNull;
 
+import org.signal.emoji.AnimatingImageSpan;
+
 public final class InlineMediaSpan extends AnimatingImageSpan {
   private final FontMetricsInt originalFm;
 

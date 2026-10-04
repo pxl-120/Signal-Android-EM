@@ -3,9 +3,7 @@ package org.thoughtcrime.securesms.mediasend.v2.review
 import android.content.DialogInterface
 import android.content.res.ColorStateList
 import android.os.Bundle
-import android.view.ContextThemeWrapper
 import android.view.KeyEvent
-import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import androidx.core.view.ViewCompat
@@ -26,7 +24,7 @@ import org.signal.core.ui.view.Stub
 import org.signal.core.util.ByteLimitInputFilter
 import org.signal.core.util.EditTextUtil
 import org.signal.core.util.getParcelableCompat
-import org.signal.mediasend.HudCommand
+import org.signal.mediasend.MediaSendFlowHudCommand
 import org.thoughtcrime.securesms.R
 import org.thoughtcrime.securesms.backup.v2.ui.warning.guardAgainstRecoveryKeyPaste
 import org.thoughtcrime.securesms.components.KeyboardAwareLinearLayout
@@ -83,13 +81,6 @@ class AddMessageDialogFragment : KeyboardEntryDialogFragment(R.layout.v2_media_a
 
   private val disposables = CompositeDisposable()
 
-  override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
-    val themeWrapper = ContextThemeWrapper(inflater.context, R.style.TextSecure_DarkTheme)
-    val themedInflater = LayoutInflater.from(themeWrapper)
-
-    return super.onCreateView(themedInflater, container, savedInstanceState)
-  }
-
   override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
     if (viewModel.isViewOnce) {
       dismissAllowingStateLoss()
@@ -126,7 +117,6 @@ class AddMessageDialogFragment : KeyboardEntryDialogFragment(R.layout.v2_media_a
     binding.hud.setOnClickListener { dismissAllowingStateLoss() }
 
     binding.content.viewOnceToggle.setOnClickListener {
-      viewModel.message = null
       viewModel.isViewOnce = true
 
       dismissAllowingStateLoss()
@@ -339,7 +329,7 @@ class AddMessageDialogFragment : KeyboardEntryDialogFragment(R.layout.v2_media_a
     const val RESULT_INCREMENT_VIEW_ONCE_STATE = "AddMessageViewModel_IncrementViewOnceState"
     const val RESULT_MESSAGE = "AddMessageViewModel__Message"
 
-    fun show(fragmentManager: FragmentManager, addAMessageDialog: HudCommand.ShowAddAMessageDialog, destination: RecipientId?) {
+    fun show(fragmentManager: FragmentManager, addAMessageDialog: MediaSendFlowHudCommand.ShowAddAMessageDialog, destination: RecipientId?) {
       return show(fragmentManager, addAMessageDialog.message, addAMessageDialog.startWithEmojiKeyboard, addAMessageDialog.isViewOnceAvailable, destination)
     }
 

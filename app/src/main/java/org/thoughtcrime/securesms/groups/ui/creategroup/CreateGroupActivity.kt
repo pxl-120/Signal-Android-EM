@@ -11,7 +11,6 @@ import android.content.Intent
 import android.os.Bundle
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
-import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.ActivityResult
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
@@ -74,7 +73,6 @@ class CreateGroupActivity : PassphraseRequiredActivity() {
   }
 
   override fun onCreate(savedInstanceState: Bundle?, ready: Boolean) {
-    enableEdgeToEdge()
     super.onCreate(savedInstanceState, ready)
 
     val navigateBack = onBackPressedDispatcher::onBackPressed
@@ -164,7 +162,6 @@ private fun CreateGroupScreenUi(
 
   RecipientPickerScaffold(
     title = title,
-    forceSplitPane = uiState.forceSplitPane,
     onNavigateUpClick = callbacks::onBackPressed,
     topAppBarActions = {},
     snackbarHostState = remember { SnackbarHostState() },
@@ -287,7 +284,6 @@ private fun CreateGroupScreenPreview() {
   Previews.Preview {
     CreateGroupScreenUi(
       uiState = CreateGroupUiState(
-        forceSplitPane = false,
         selectionLimits = SelectionLimits.NO_LIMITS
       ),
       callbacks = CreateGroupUiCallbacks.Empty

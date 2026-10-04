@@ -11,10 +11,12 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -104,7 +106,7 @@ class CreateFoldersFragment : ComposeFragment() {
     }
 
     LaunchedEffect(Unit) {
-      if (!SignalStore.uiHints.hasSeenChatFoldersEducationSheet) {
+      if (viewModel.shouldShowEducationSheet()) {
         SignalStore.uiHints.hasSeenChatFoldersEducationSheet = true
         navController.safeNavigate(R.id.action_createFoldersFragment_to_chatFoldersEducationSheet)
       }
@@ -125,7 +127,10 @@ class CreateFoldersFragment : ComposeFragment() {
       CreateFolderScreen(
         state = state,
         focusRequester = focusRequester,
-        modifier = Modifier.padding(contentPadding),
+        modifier = Modifier
+          .padding(contentPadding)
+          .consumeWindowInsets(contentPadding)
+          .imePadding(),
         isNewFolder = isNewFolder,
         hasChanges = viewModel.hasChanges(),
         onAddChat = {

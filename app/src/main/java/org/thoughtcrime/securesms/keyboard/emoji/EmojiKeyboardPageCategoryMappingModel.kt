@@ -3,12 +3,12 @@ package org.thoughtcrime.securesms.keyboard.emoji
 import android.content.Context
 import android.graphics.drawable.Drawable
 import org.signal.core.ui.util.ThemeUtil
+import org.signal.emoji.EmojiCategory
 import org.thoughtcrime.securesms.R
-import org.thoughtcrime.securesms.components.emoji.RecentEmojiPageModel
-import org.thoughtcrime.securesms.emoji.EmojiCategory
-import org.thoughtcrime.securesms.keyboard.KeyboardPageCategoryIconMappingModel
-
 import org.thoughtcrime.securesms.components.emoji.CustomEmojiPageModel
+import org.thoughtcrime.securesms.components.emoji.RecentEmojiPageModel
+import org.thoughtcrime.securesms.keyboard.KeyboardPageCategoryIconMappingModel
+import org.signal.emoji.R as EmojiR
 
 class RecentsMappingModel(
   override val selected: Boolean
@@ -16,7 +16,7 @@ class RecentsMappingModel(
   override val key: String = RecentEmojiPageModel.KEY
 
   override fun getIcon(context: Context): Drawable {
-    return requireNotNull(ThemeUtil.getThemedDrawable(context, R.attr.emoji_category_recent))
+    return requireNotNull(ThemeUtil.getThemedDrawable(context, EmojiR.attr.emoji_category_recent))
   }
 
   override fun getContentDescription(context: Context): String {
@@ -63,7 +63,7 @@ class CustomMappingModel(
   override val key: String = CustomEmojiPageModel.KEY
 
   override fun getIcon(context: Context): Drawable {
-    return requireNotNull(ThemeUtil.getThemedDrawable(context, R.attr.emoji_category_objects))
+    return requireNotNull(ThemeUtil.getThemedDrawable(context, EmojiR.attr.emoji_category_objects))
   }
 
   override fun getContentDescription(context: Context): String {

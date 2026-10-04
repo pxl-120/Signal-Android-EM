@@ -51,6 +51,11 @@ class SyncMessageProcessorTest_attachmentBackfill {
     originalDeviceId = SignalStore.account.deviceId
     // Make this device a linked device so backfill response handling activates.
     SignalStore.account.deviceId = 2
+
+    // Prevent AttachmentDownloadJob onAdded from async changing the attachment state.
+    SignalStore.settings.wifiMediaDownloadAllowed = emptySet()
+    SignalStore.settings.mobileMediaDownloadAllowed = emptySet()
+    SignalStore.settings.roamingMediaDownloadAllowed = emptySet()
   }
 
   @After

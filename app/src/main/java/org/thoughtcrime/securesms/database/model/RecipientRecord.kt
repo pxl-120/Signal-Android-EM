@@ -37,6 +37,7 @@ data class RecipientRecord(
   val distributionListId: DistributionListId?,
   val recipientType: RecipientTable.RecipientType,
   val isBlocked: Boolean,
+  val blockedAt: Long,
   val muteUntil: Long,
   val messageVibrateState: VibrateState,
   val callVibrateState: VibrateState,
@@ -66,6 +67,7 @@ data class RecipientRecord(
   val mentionSetting: NotificationSetting,
   val callNotificationSetting: NotificationSetting,
   val replyNotificationSetting: NotificationSetting,
+  val unreadReminder: NotificationSetting,
   val wallpaper: ChatWallpaper?,
   val chatColors: ChatColors?,
   val avatarColor: AvatarColor,
@@ -83,6 +85,7 @@ data class RecipientRecord(
   val phoneNumberSharing: PhoneNumberSharingState,
   val nickname: ProfileName,
   val note: String?,
+  val sharedName: ProfileName,
   val keyTransparencyData: ByteArray? = null
 ) {
 
@@ -122,13 +125,15 @@ data class RecipientRecord(
 
   data class Capabilities(
     val rawBits: Long,
-    val usernameSyncMessages: Recipient.Capability
+    val usernameSyncMessages: Recipient.Capability,
+    val optionalPhoneNumber: Recipient.Capability
   ) {
     companion object {
       @JvmField
       val UNKNOWN = Capabilities(
         rawBits = 0,
-        usernameSyncMessages = Recipient.Capability.UNKNOWN
+        usernameSyncMessages = Recipient.Capability.UNKNOWN,
+        optionalPhoneNumber = Recipient.Capability.UNKNOWN
       )
     }
   }

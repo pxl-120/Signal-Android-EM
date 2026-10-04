@@ -1387,6 +1387,20 @@ class CallTable(context: Context, databaseHelper: SignalDatabase) : DatabaseTabl
     Log.d(TAG, "Remapped $fromId to $toId. peerCount: $peerCount, ringerCount: $ringerCount")
   }
 
+  override fun onDeletedRecipient(recipientId: RecipientId) {
+    val deletedPeer = writableDatabase
+      .delete(TABLE_NAME)
+      .where("$PEER = ?", recipientId)
+      .run()
+
+    val deletedRinger = writableDatabase
+      .delete(TABLE_NAME)
+      .where("$RINGER = ?", recipientId)
+      .run()
+
+    Log.d(TAG, "Deleted recipient: $deletedPeer $deletedRinger")
+  }
+
   /**
    * @param isGroupCallActive - Whether the group call currently contains users. Only valid for group calls.
    * @param didLocalUserJoin   - Determines whether the local user joined this call. Only valid for group calls.
@@ -1411,7 +1425,7 @@ class CallTable(context: Context, databaseHelper: SignalDatabase) : DatabaseTabl
     companion object Deserializer : Serializer<Call, Cursor> {
 
       private fun isDisplayedAsMissedCallInUi(call: Call): Boolean {
-        return call.direction == Direction.INCOMING && (call.event in Event.DISPLAY_AS_MISSED_CALL || (call.event == Event.GENERIC_GROUP_CALL && !call.didLocalUserJoin && !call.isGroupCallActive))
+        return call.direction == Direction.INCOMING && (call.event in Event.DISPLAY_AS_MISSED_CALL || (call.type == Type.GROUP_CALL && call.event == Event.GENERIC_GROUP_CALL && !call.didLocalUserJoin && !call.isGroupCallActive))
       }
 
       fun getMessageType(type: Type, direction: Direction, event: Event): Long {

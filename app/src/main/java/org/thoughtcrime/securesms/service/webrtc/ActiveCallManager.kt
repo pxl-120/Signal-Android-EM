@@ -28,14 +28,14 @@ import io.reactivex.rxjava3.disposables.Disposable
 import io.reactivex.rxjava3.kotlin.subscribeBy
 import io.reactivex.rxjava3.schedulers.Schedulers
 import org.signal.core.ui.permissions.Permissions
+import org.signal.core.util.DeviceProperties
 import org.signal.core.util.PendingIntentFlags
+import org.signal.core.util.SafeForegroundService
+import org.signal.core.util.UnableToStartException
 import org.signal.core.util.logging.Log
 import org.thoughtcrime.securesms.dependencies.AppDependencies
-import org.thoughtcrime.securesms.jobs.UnableToStartException
 import org.thoughtcrime.securesms.recipients.Recipient
 import org.thoughtcrime.securesms.recipients.RecipientId
-import org.thoughtcrime.securesms.service.SafeForegroundService
-import org.thoughtcrime.securesms.util.DeviceProperties
 import org.thoughtcrime.securesms.util.TelephonyUtil
 import org.thoughtcrime.securesms.webrtc.CallNotificationBuilder
 import org.thoughtcrime.securesms.webrtc.UncaughtExceptionHandlerManager
@@ -276,8 +276,16 @@ class ActiveCallManager(
     callManager.onAudioDeviceChangeFailed()
   }
 
+  override fun onAudioReadyForAccept() {
+    callManager.onAudioReadyForAccept()
+  }
+
   override fun onBluetoothPermissionDenied() {
     callManager.onBluetoothPermissionDenied()
+  }
+
+  override fun onMicrophoneSilencedChanged(silenced: Boolean) {
+    callManager.onMicrophoneSilencedChanged(silenced)
   }
 
   /** Foreground service started only after a call is established */

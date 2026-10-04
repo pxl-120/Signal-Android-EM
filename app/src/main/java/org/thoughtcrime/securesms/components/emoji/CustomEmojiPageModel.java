@@ -4,7 +4,9 @@ import android.net.Uri;
 
 import androidx.annotation.Nullable;
 
-import org.thoughtcrime.securesms.R;
+import org.signal.emoji.Emoji;
+import org.signal.emoji.EmojiPageModel;
+import org.signal.emoji.R;
 
 import java.util.ArrayList;
 import java.util.Collections;

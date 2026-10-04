@@ -140,6 +140,11 @@ public class WebRtcServiceStateBuilder {
       return this;
     }
 
+    public @NonNull LocalDeviceStateBuilder setMicrophoneSilencedTimestamp(long microphoneSilencedTimestamp) {
+      toBuild.setMicrophoneSilencedTimestamp(microphoneSilencedTimestamp);
+      return this;
+    }
+
     public @NonNull LocalDeviceStateBuilder setAudioDeviceChangePending(boolean isAudioDeviceChangePending) {
       toBuild.setAudioDeviceChangePending(isAudioDeviceChangePending);
       return this;
@@ -203,6 +208,16 @@ public class WebRtcServiceStateBuilder {
 
     public @NonNull CallSetupStateBuilder acceptWithVideo(boolean acceptWithVideo) {
       toBuild.setAcceptWithVideo(acceptWithVideo);
+      return this;
+    }
+
+    public @NonNull CallSetupStateBuilder accepted(boolean accepted) {
+      toBuild.setAccepted(accepted);
+      return this;
+    }
+
+    public @NonNull CallSetupStateBuilder waitForAudio(boolean waitForAudio) {
+      toBuild.setWaitForAudio(waitForAudio);
       return this;
     }
 

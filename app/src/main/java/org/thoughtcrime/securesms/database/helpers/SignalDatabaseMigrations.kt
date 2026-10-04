@@ -174,6 +174,13 @@ import org.thoughtcrime.securesms.database.helpers.migration.V318_AddMessageNoti
 import org.thoughtcrime.securesms.database.helpers.migration.V319_AddAttachmentAndMessageIndexes
 import org.thoughtcrime.securesms.database.helpers.migration.V320_AddAttachmentThumbnailFileAndUuidIndexes
 import org.thoughtcrime.securesms.database.helpers.migration.V321_AddScheduledMessageIndex
+import org.thoughtcrime.securesms.database.helpers.migration.V322_NormalizeStickerTable
+import org.thoughtcrime.securesms.database.helpers.migration.V323_AddStickerPackStorageSync
+import org.thoughtcrime.securesms.database.helpers.migration.V324_MoveGroupV1StorageIdsToUnknownIds
+import org.thoughtcrime.securesms.database.helpers.migration.V325_AddBlockedAtToRecipientTable
+import org.thoughtcrime.securesms.database.helpers.migration.V326_AddUnreadReminderColumn
+import org.thoughtcrime.securesms.database.helpers.migration.V327_AddLastUnreadReminderColumn
+import org.thoughtcrime.securesms.database.helpers.migration.V328_AddSharedNameToRecipientTable
 import org.thoughtcrime.securesms.database.SQLiteDatabase as SignalSqliteDatabase
 
 /**
@@ -355,10 +362,17 @@ object SignalDatabaseMigrations {
     318 to V318_AddMessageNotificationStateIndex,
     319 to V319_AddAttachmentAndMessageIndexes,
     320 to V320_AddAttachmentThumbnailFileAndUuidIndexes,
-    321 to V321_AddScheduledMessageIndex
+    321 to V321_AddScheduledMessageIndex,
+    322 to V322_NormalizeStickerTable,
+    323 to V323_AddStickerPackStorageSync,
+    324 to V324_MoveGroupV1StorageIdsToUnknownIds,
+    325 to V325_AddBlockedAtToRecipientTable,
+    326 to V326_AddUnreadReminderColumn,
+    327 to V327_AddLastUnreadReminderColumn,
+    328 to V328_AddSharedNameToRecipientTable
   )
 
-  const val DATABASE_VERSION = 321
+  const val DATABASE_VERSION = 328
 
   @JvmStatic
   fun migrate(context: Application, db: SignalSqliteDatabase, oldVersion: Int, newVersion: Int) {

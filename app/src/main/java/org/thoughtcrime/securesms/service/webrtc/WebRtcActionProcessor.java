@@ -365,6 +365,11 @@ public abstract class WebRtcActionProcessor {
     return currentState;
   }
 
+  protected @NonNull WebRtcServiceState handleAudioReadyForAccept(@NonNull WebRtcServiceState currentState) {
+    Log.i(tag, "handleAudioReadyForAccept not processed");
+    return currentState;
+  }
+
   protected @NonNull WebRtcServiceState handleReceivedOfferWhileActive(@NonNull WebRtcServiceState currentState, @NonNull RemotePeer remotePeer) {
     Log.i(tag, "handleReceivedOfferWhileActive not processed");
     return currentState;
@@ -520,6 +525,11 @@ public abstract class WebRtcActionProcessor {
                        .changeLocalDeviceState()
                        .setBluetoothPermissionDenied(true)
                        .build();
+  }
+
+  protected @NonNull WebRtcServiceState handleMicrophoneSilencedChanged(@NonNull WebRtcServiceState currentState, boolean silenced) {
+    Log.i(tag, "handleMicrophoneSilencedChanged not processed");
+    return currentState;
   }
 
   protected @NonNull WebRtcServiceState handleSetUserAudioDevice(@NonNull WebRtcServiceState currentState, @NonNull SignalAudioManager.ChosenAudioDeviceIdentifier userDevice) {

@@ -57,6 +57,7 @@ object GroupArchiveImporter {
       put(RecipientTable.AVATAR_COLOR, AvatarColorHash.forGroupId(groupId).serialize())
       put(RecipientTable.PROFILE_SHARING, group.whitelisted.toInt())
       put(RecipientTable.BLOCKED, group.blocked.toInt())
+      put(RecipientTable.BLOCKED_AT, group.blockedAtTimestamp)
       put(RecipientTable.TYPE, RecipientTable.RecipientType.GV2.id)
       put(RecipientTable.STORAGE_SERVICE_ID, Base64.encodeWithPadding(StorageSyncHelper.generateKey()))
       put(RecipientTable.AVATAR_COLOR, group.avatarColor?.toLocal()?.serialize())
@@ -162,8 +163,8 @@ private fun Group.GroupSnapshot.toLocal(operations: GroupsV2Operations.GroupOper
     requestingMembers = requestingMembers,
     inviteLinkPassword = this.inviteLinkPassword,
     description = this.description?.descriptionText ?: "",
-    isAnnouncementGroup = if (this.announcements_only) EnabledState.ENABLED else EnabledState.DISABLED,
-    bannedMembers = this.members_banned.map { it.toLocal() },
+    isAnnouncementGroup = if (this.announcementsOnly) EnabledState.ENABLED else EnabledState.DISABLED,
+    bannedMembers = this.membersBanned.map { it.toLocal() },
     terminated = this.terminated,
     isPlaceholderGroup = isPlaceholder
   )

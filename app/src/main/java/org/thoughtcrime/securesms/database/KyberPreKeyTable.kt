@@ -127,12 +127,7 @@ class KyberPreKeyTable(context: Context, databaseHelper: SignalDatabase) : Datab
    */
   fun handleMarkKyberPreKeyUsed(serviceId: ServiceId, kyberPreKeyId: Int, signedPreKeyId: Int, baseKey: ECPublicKey) {
     writableDatabase.withinTransaction { db ->
-      val lastResortRowId = db
-        .select(ID)
-        .from(TABLE_NAME)
-        .where("$ACCOUNT_ID = ? AND $KEY_ID = ? AND $LAST_RESORT = ?", serviceId.toAccountId(), kyberPreKeyId, 1)
-        .run()
-        .readToSingleInt(-1)
+      val lastResortRowId = getLastResortRowId(db, serviceId, kyberPreKeyId)
 
       if (lastResortRowId < 0) {
         db.delete("$TABLE_NAME INDEXED BY $INDEX_ACCOUNT_KEY")
@@ -148,10 +143,39 @@ class KyberPreKeyTable(context: Context, databaseHelper: SignalDatabase) : Datab
     }
   }
 
+  /**
+   * Whether we've already marked the given last-resort key set as used. If we have, then the sender is re-using a base key, and the message
+   * should be rejected rather than decrypted.
+   *
+   * Always false for non-last-resort keys, since those are simply deleted when used.
+   */
+  fun hasUsedLastResortKeySet(serviceId: ServiceId, kyberPreKeyId: Int, signedPreKeyId: Int, baseKey: ECPublicKey): Boolean {
+    val lastResortRowId = getLastResortRowId(readableDatabase, serviceId, kyberPreKeyId)
+
+    return lastResortRowId >= 0 && SignalDatabase.lastResortKeyTuples.exists(lastResortRowId, signedPreKeyId, baseKey)
+  }
+
+  private fun getLastResortRowId(db: SQLiteDatabase, serviceId: ServiceId, kyberPreKeyId: Int): Int {
+    return db
+      .select(ID)
+      .from(TABLE_NAME)
+      .where("$ACCOUNT_ID = ? AND $KEY_ID = ? AND $LAST_RESORT = ?", serviceId.toAccountId(), kyberPreKeyId, 1)
+      .run()
+      .readToSingleInt(-1)
+  }
+
   fun delete(serviceId: ServiceId, keyId: Int) {
     writableDatabase
       .delete("$TABLE_NAME INDEXED BY $INDEX_ACCOUNT_KEY")
       .where("$ACCOUNT_ID = ? AND $KEY_ID = ?", serviceId.toAccountId(), keyId)
+      .run()
+  }
+
+  /** Deletes every kyber pre-key belonging to the given identity. Cascades to [LastResortKeyTupleTable]. */
+  fun deleteAll(serviceId: ServiceId) {
+    writableDatabase
+      .delete(TABLE_NAME)
+      .where("$ACCOUNT_ID = ?", serviceId.toAccountId())
       .run()
   }
 

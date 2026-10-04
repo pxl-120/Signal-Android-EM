@@ -18,9 +18,13 @@ import android.graphics.drawable.Drawable
 import android.os.SystemClock
 import androidx.core.graphics.BlendModeCompat
 import androidx.core.graphics.setBlendMode
+import org.signal.core.util.logging.Log
+import java.io.IOException
 
 class ApngDrawable(val decoder: ApngDecoder) : Drawable(), Animatable {
   companion object {
+    private val TAG = Log.tag(ApngDrawable::class)
+
     private val CLEAR_PAINT = Paint().apply {
       color = Color.TRANSPARENT
       setBlendMode(BlendModeCompat.CLEAR)
@@ -46,6 +50,10 @@ class ApngDrawable(val decoder: ApngDecoder) : Drawable(), Animatable {
 
   private val frameRect = Rect(0, 0, 0, 0)
 
+  // Frames are scaled into the drawable's bounds so that view-level scaling reaches the animation,
+  // which request-level transformations do not. Filtering keeps that scale smooth.
+  private val bitmapPaint = Paint(Paint.FILTER_BITMAP_FLAG)
+
   private var timeForNextFrame = 0L
 
   private val activeBitmap = Bitmap.createBitmap(decoder.metadata.width, decoder.metadata.height, Bitmap.Config.ARGB_8888)
@@ -60,25 +68,32 @@ class ApngDrawable(val decoder: ApngDecoder) : Drawable(), Animatable {
 
   override fun draw(canvas: Canvas) {
     if (!playing) {
-      canvas.drawBitmap(activeBitmap, 0f, 0f, null)
+      canvas.drawActiveFrame()
       return
     }
 
     if (SystemClock.uptimeMillis() < timeForNextFrame) {
-      canvas.drawBitmap(activeBitmap, 0f, 0f, null)
+      canvas.drawActiveFrame()
       scheduleSelf({ invalidateSelf() }, timeForNextFrame)
       return
     }
 
     val totalPlays = decoder.metadata.numPlays
     if (playCount >= totalPlays && !loopForever) {
-      canvas.drawBitmap(activeBitmap, 0f, 0f, null)
+      canvas.drawActiveFrame()
       return
     }
 
     val frame = decoder.frames[position]
-    drawFrame(frame, position)
-    canvas.drawBitmap(activeBitmap, 0f, 0f, null)
+    try {
+      drawFrame(frame, position)
+    } catch (e: IOException) {
+      Log.w(TAG, "Failed to decode frame $position. Stopping the animation.", e)
+      playing = false
+      canvas.drawActiveFrame()
+      return
+    }
+    canvas.drawActiveFrame()
 
     position = (position + 1) % decoder.frames.size
     if (position == 0) {
@@ -225,6 +240,8 @@ class ApngDrawable(val decoder: ApngDecoder) : Drawable(), Animatable {
 
       return (delayNumerator * 1000 / delayDenominator).toLong()
     }
+
+  private fun Canvas.drawActiveFrame() = drawBitmap(activeBitmap, null, bounds, bitmapPaint)
 
   private fun Rect.updateBoundsFrom(frame: ApngDecoder.Frame) {
     left = frame.fcTL.xOffset.toInt()

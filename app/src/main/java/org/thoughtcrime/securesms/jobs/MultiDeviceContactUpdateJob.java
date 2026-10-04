@@ -32,7 +32,6 @@ import org.thoughtcrime.securesms.net.NotPushRegisteredException;
 import org.thoughtcrime.securesms.recipients.Recipient;
 import org.thoughtcrime.securesms.recipients.RecipientId;
 import org.thoughtcrime.securesms.recipients.RecipientUtil;
-import org.thoughtcrime.securesms.util.TextSecurePreferences;
 import org.whispersystems.signalservice.api.SignalServiceMessageSender;
 import org.whispersystems.signalservice.api.crypto.AttachmentCipherStreamUtil;
 import org.whispersystems.signalservice.api.crypto.UntrustedIdentityException;
@@ -196,18 +195,18 @@ public class MultiDeviceContactUpdateJob extends BaseJob {
       throws IOException, UntrustedIdentityException, NetworkException, NoSessionException
   {
     boolean isAppVisible      = AppForegroundObserver.isForegrounded();
-    long    timeSinceLastSync = System.currentTimeMillis() - TextSecurePreferences.getLastFullContactSyncTime(context);
+    long    timeSinceLastSync = System.currentTimeMillis() - SignalStore.misc().getLastFullContactSyncTime();
 
     Log.d(TAG, "Requesting a full contact sync. forced = " + forceSync + ", appVisible = " + isAppVisible + ", timeSinceLastSync = " + timeSinceLastSync + " ms");
 
     if (!forceSync && !isAppVisible && timeSinceLastSync < FULL_SYNC_TIME) {
       Log.i(TAG, "App is backgrounded and the last contact sync was too soon (" + timeSinceLastSync + " ms ago). Marking that we need a sync. Skipping multi-device contact update...");
-      TextSecurePreferences.setNeedsFullContactSync(context, true);
+      SignalStore.misc().setNeedsFullContactSync(true);
       return;
     }
 
-    TextSecurePreferences.setLastFullContactSyncTime(context, System.currentTimeMillis());
-    TextSecurePreferences.setNeedsFullContactSync(context, false);
+    SignalStore.misc().setLastFullContactSyncTime(System.currentTimeMillis());
+    SignalStore.misc().setNeedsFullContactSync(false);
 
     WriteDetails writeDetails = createTempFile();
 
@@ -219,6 +218,11 @@ public class MultiDeviceContactUpdateJob extends BaseJob {
       Set<RecipientId>           archived       = SignalDatabase.threads().getArchivedRecipients();
 
       for (Recipient recipient : recipients) {
+        if (!recipient.getHasE164() && !recipient.getHasAci()) {
+          Log.w(TAG, recipient.getId() + " has no valid identifier! Skipping.");
+          continue;
+        }
+
         Optional<IdentityRecord>  identity           = AppDependencies.getProtocolStore().aci().identities().getIdentityRecord(recipient.getId());
         Optional<String>          name               = Optional.ofNullable(recipient.isSystemContact() ? recipient.getDisplayName(context) : recipient.getGroupName(context));
         Optional<Integer>         expireTimer        = recipient.getExpiresInSeconds() > 0 ? Optional.of(recipient.getExpiresInSeconds()) : Optional.empty();
@@ -238,9 +242,9 @@ public class MultiDeviceContactUpdateJob extends BaseJob {
       Recipient self       = Recipient.self();
       byte[]    profileKey = self.getProfileKey();
 
-      if (profileKey != null) {
-        out.write(new DeviceContact(Optional.of(SignalStore.account().getAci()),
-                                    Optional.of(SignalStore.account().getE164()),
+      if (profileKey != null && (self.getHasAci() || self.getHasE164())) {
+        out.write(new DeviceContact(self.getAci(),
+                                    self.getE164(),
                                     Optional.empty(),
                                     Optional.empty(),
                                     self.getExpiresInSeconds() > 0 ? Optional.of(self.getExpiresInSeconds()) : Optional.empty(),

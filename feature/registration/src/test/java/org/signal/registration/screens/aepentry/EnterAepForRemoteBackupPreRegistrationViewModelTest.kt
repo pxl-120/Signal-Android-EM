@@ -12,19 +12,29 @@ import assertk.assertions.isInstanceOf
 import assertk.assertions.isNull
 import assertk.assertions.prop
 import io.mockk.coEvery
+import io.mockk.coVerify
 import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
 import org.junit.Before
 import org.junit.Test
 import org.signal.core.models.AccountEntropyPool
+import org.signal.core.models.ServiceId.ACI
 import org.signal.libsignal.net.RequestResult
+import org.signal.network.api.RegistrationApiV2.RegisterAccountError
+import org.signal.network.api.RegistrationApiV2.RegisterAccountResponse
+import org.signal.network.api.RegistrationApiV2.RegistrationLockResponse
+import org.signal.network.api.RegistrationApiV2.SvrCredentials
 import org.signal.registration.KeyMaterial
-import org.signal.registration.NetworkController
+import org.signal.registration.RegisteredAccountData
 import org.signal.registration.RegistrationFlowEvent
 import org.signal.registration.RegistrationRepository
 import org.signal.registration.RegistrationRoute
+import java.util.UUID
+import kotlin.time.Duration
 
 class EnterAepForRemoteBackupPreRegistrationViewModelTest {
+
+  private val testAci = ACI.from(UUID.fromString("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"))
 
   private lateinit var viewModel: EnterAepForRemoteBackupPreRegistrationViewModel
   private lateinit var mockRepository: RegistrationRepository
@@ -56,7 +66,7 @@ class EnterAepForRemoteBackupPreRegistrationViewModelTest {
     viewModel.applyEvent(initialState, EnterAepEvents.BackupKeyChanged(VALID_AEP), stateEmitter)
 
     assertThat(emittedStates).hasSize(1)
-    assertThat(emittedStates.last().backupKey).isEqualTo(VALID_AEP)
+    assertThat(emittedStates.last().recoveryKey.normalized).isEqualTo(VALID_AEP)
   }
 
   // ==================== Submit Success Tests ====================
@@ -67,11 +77,11 @@ class EnterAepForRemoteBackupPreRegistrationViewModelTest {
     val mockKeyMaterial = mockk<KeyMaterial>(relaxed = true) {
       io.mockk.every { accountEntropyPool } returns aep
     }
-    val mockResponse = mockk<NetworkController.RegisterAccountResponse>(relaxed = true)
-    val initialState = EnterAepState(backupKey = VALID_AEP, isBackupKeyValid = true)
+    val mockResponse = mockk<RegisterAccountResponse>(relaxed = true)
+    val initialState = EnterAepState(recoveryKey = AepInput.from(VALID_AEP))
 
     coEvery { mockRepository.registerAccountWithRecoveryPassword(any(), any(), any(), any(), any(), any()) } returns
-      RequestResult.Success(mockResponse to mockKeyMaterial)
+      RequestResult.Success(RegisteredAccountData(mockResponse, mockKeyMaterial, testAci))
 
     viewModel.applyEvent(initialState, EnterAepEvents.Submit, stateEmitter)
 
@@ -90,11 +100,11 @@ class EnterAepForRemoteBackupPreRegistrationViewModelTest {
     val mockKeyMaterial = mockk<KeyMaterial>(relaxed = true) {
       io.mockk.every { accountEntropyPool } returns aep
     }
-    val mockResponse = mockk<NetworkController.RegisterAccountResponse>(relaxed = true)
-    val initialState = EnterAepState(backupKey = VALID_AEP, isBackupKeyValid = true)
+    val mockResponse = mockk<RegisterAccountResponse>(relaxed = true)
+    val initialState = EnterAepState(recoveryKey = AepInput.from(VALID_AEP))
 
     coEvery { mockRepository.registerAccountWithRecoveryPassword(any(), any(), any(), any(), any(), any()) } returns
-      RequestResult.Success(mockResponse to mockKeyMaterial)
+      RequestResult.Success(RegisteredAccountData(mockResponse, mockKeyMaterial, testAci))
 
     viewModel.applyEvent(initialState, EnterAepEvents.Submit, stateEmitter)
 
@@ -106,28 +116,28 @@ class EnterAepForRemoteBackupPreRegistrationViewModelTest {
   // ==================== Submit Error Tests ====================
 
   @Test
-  fun `Submit with RegistrationRecoveryPasswordIncorrect sets registrationError and aepValidationError`() = runTest {
-    val initialState = EnterAepState(backupKey = VALID_AEP, isBackupKeyValid = true)
+  fun `Submit with RegistrationRecoveryPasswordIncorrect sets registrationError and flags the recovery key`() = runTest {
+    val initialState = EnterAepState(recoveryKey = AepInput.from(VALID_AEP))
 
     coEvery { mockRepository.registerAccountWithRecoveryPassword(any(), any(), any(), any(), any(), any()) } returns
       RequestResult.NonSuccess(
-        NetworkController.RegisterAccountError.RegistrationRecoveryPasswordIncorrect("Incorrect")
+        RegisterAccountError.RegistrationRecoveryPasswordIncorrect("Incorrect")
       )
 
     viewModel.applyEvent(initialState, EnterAepEvents.Submit, stateEmitter)
 
     assertThat(emittedStates.last().registrationError).isEqualTo(RegistrationError.IncorrectRecoveryPassword)
-    assertThat(emittedStates.last().aepValidationError).isEqualTo(AepValidationError.Incorrect)
+    assertThat(emittedStates.last().recoveryKey.error).isEqualTo(AepValidationError.Incorrect)
     assertThat(emittedStates.last().isRegistering).isEqualTo(false)
   }
 
   @Test
   fun `Submit with InvalidRequest sets registrationError to UnknownError`() = runTest {
-    val initialState = EnterAepState(backupKey = VALID_AEP, isBackupKeyValid = true)
+    val initialState = EnterAepState(recoveryKey = AepInput.from(VALID_AEP))
 
     coEvery { mockRepository.registerAccountWithRecoveryPassword(any(), any(), any(), any(), any(), any()) } returns
       RequestResult.NonSuccess(
-        NetworkController.RegisterAccountError.InvalidRequest("Bad request")
+        RegisterAccountError.InvalidRequest("Bad request")
       )
 
     viewModel.applyEvent(initialState, EnterAepEvents.Submit, stateEmitter)
@@ -137,17 +147,51 @@ class EnterAepForRemoteBackupPreRegistrationViewModelTest {
   }
 
   @Test
-  fun `Submit with RegistrationLock navigates to PinEntryForRegistrationLock`() = runTest {
-    val initialState = EnterAepState(backupKey = VALID_AEP, isBackupKeyValid = true)
-    val svrCredentials = NetworkController.SvrCredentials(username = "test-username", password = "test-password")
-    val registrationLockData = NetworkController.RegistrationLockResponse(
+  fun `Submit with RegistrationLock retries with the reglock token derived from the AEP`() = runTest {
+    val aep = AccountEntropyPool(VALID_AEP)
+    val mockKeyMaterial = mockk<KeyMaterial>(relaxed = true) {
+      io.mockk.every { accountEntropyPool } returns aep
+    }
+    val mockResponse = mockk<RegisterAccountResponse>(relaxed = true)
+    val initialState = EnterAepState(recoveryKey = AepInput.from(VALID_AEP))
+    val registrationLockData = RegistrationLockResponse(
+      timeRemaining = 86400000L,
+      svr2Credentials = SvrCredentials(username = "test-username", password = "test-password")
+    )
+
+    coEvery { mockRepository.registerAccountWithRecoveryPassword(any(), any(), registrationLock = any<String>(), any(), any(), any()) } returns
+      RequestResult.Success(RegisteredAccountData(mockResponse, mockKeyMaterial, testAci))
+    coEvery { mockRepository.registerAccountWithRecoveryPassword(any(), any(), registrationLock = null, any(), any(), any()) } returns
+      RequestResult.NonSuccess(
+        RegisterAccountError.RegistrationLock(registrationLockData)
+      )
+
+    viewModel.applyEvent(initialState, EnterAepEvents.Submit, stateEmitter)
+
+    coVerify {
+      mockRepository.registerAccountWithRecoveryPassword(any(), any(), registrationLock = aep.deriveMasterKey().deriveRegistrationLock(), any(), any(), any())
+    }
+    assertThat(emittedParentEvents).hasSize(3)
+    assertThat(emittedParentEvents[0]).isInstanceOf<RegistrationFlowEvent.UserSuppliedAepSubmitted>()
+    assertThat(emittedParentEvents[1]).isInstanceOf<RegistrationFlowEvent.Registered>()
+    assertThat(emittedParentEvents[2])
+      .isInstanceOf<RegistrationFlowEvent.NavigateToScreen>()
+      .prop(RegistrationFlowEvent.NavigateToScreen::route)
+      .isInstanceOf<RegistrationRoute.RemoteRestore>()
+  }
+
+  @Test
+  fun `Submit with RegistrationLock when already providing the reglock token navigates to PinEntryForRegistrationLock`() = runTest {
+    val initialState = EnterAepState(recoveryKey = AepInput.from(VALID_AEP))
+    val svrCredentials = SvrCredentials(username = "test-username", password = "test-password")
+    val registrationLockData = RegistrationLockResponse(
       timeRemaining = 86400000L,
       svr2Credentials = svrCredentials
     )
 
     coEvery { mockRepository.registerAccountWithRecoveryPassword(any(), any(), any(), any(), any(), any()) } returns
       RequestResult.NonSuccess(
-        NetworkController.RegisterAccountError.RegistrationLock(registrationLockData)
+        RegisterAccountError.RegistrationLock(registrationLockData)
       )
 
     viewModel.applyEvent(initialState, EnterAepEvents.Submit, stateEmitter)
@@ -162,11 +206,11 @@ class EnterAepForRemoteBackupPreRegistrationViewModelTest {
 
   @Test
   fun `Submit with RateLimited sets registrationError to RateLimited`() = runTest {
-    val initialState = EnterAepState(backupKey = VALID_AEP, isBackupKeyValid = true)
+    val initialState = EnterAepState(recoveryKey = AepInput.from(VALID_AEP))
 
     coEvery { mockRepository.registerAccountWithRecoveryPassword(any(), any(), any(), any(), any(), any()) } returns
       RequestResult.NonSuccess(
-        NetworkController.RegisterAccountError.RateLimited(kotlin.time.Duration.parse("1m"))
+        RegisterAccountError.RateLimited(Duration.parse("1m"))
       )
 
     viewModel.applyEvent(initialState, EnterAepEvents.Submit, stateEmitter)
@@ -177,11 +221,11 @@ class EnterAepForRemoteBackupPreRegistrationViewModelTest {
 
   @Test(expected = IllegalStateException::class)
   fun `Submit with SessionNotFoundOrNotVerified throws IllegalStateException`() = runTest {
-    val initialState = EnterAepState(backupKey = VALID_AEP, isBackupKeyValid = true)
+    val initialState = EnterAepState(recoveryKey = AepInput.from(VALID_AEP))
 
     coEvery { mockRepository.registerAccountWithRecoveryPassword(any(), any(), any(), any(), any(), any()) } returns
       RequestResult.NonSuccess(
-        NetworkController.RegisterAccountError.SessionNotFoundOrNotVerified("Not found")
+        RegisterAccountError.SessionNotFoundOrNotVerified("Not found")
       )
 
     viewModel.applyEvent(initialState, EnterAepEvents.Submit, stateEmitter)
@@ -189,11 +233,11 @@ class EnterAepForRemoteBackupPreRegistrationViewModelTest {
 
   @Test(expected = IllegalStateException::class)
   fun `Submit with DeviceTransferPossible throws IllegalStateException`() = runTest {
-    val initialState = EnterAepState(backupKey = VALID_AEP, isBackupKeyValid = true)
+    val initialState = EnterAepState(recoveryKey = AepInput.from(VALID_AEP))
 
     coEvery { mockRepository.registerAccountWithRecoveryPassword(any(), any(), any(), any(), any(), any()) } returns
       RequestResult.NonSuccess(
-        NetworkController.RegisterAccountError.DeviceTransferPossible
+        RegisterAccountError.DeviceTransferPossible
       )
 
     viewModel.applyEvent(initialState, EnterAepEvents.Submit, stateEmitter)
@@ -201,7 +245,7 @@ class EnterAepForRemoteBackupPreRegistrationViewModelTest {
 
   @Test
   fun `Submit with RetryableNetworkError sets registrationError to NetworkError`() = runTest {
-    val initialState = EnterAepState(backupKey = VALID_AEP, isBackupKeyValid = true)
+    val initialState = EnterAepState(recoveryKey = AepInput.from(VALID_AEP))
 
     coEvery { mockRepository.registerAccountWithRecoveryPassword(any(), any(), any(), any(), any(), any()) } returns
       RequestResult.RetryableNetworkError(java.io.IOException("Network error"))
@@ -214,7 +258,7 @@ class EnterAepForRemoteBackupPreRegistrationViewModelTest {
 
   @Test
   fun `Submit with ApplicationError sets registrationError to UnknownError`() = runTest {
-    val initialState = EnterAepState(backupKey = VALID_AEP, isBackupKeyValid = true)
+    val initialState = EnterAepState(recoveryKey = AepInput.from(VALID_AEP))
 
     coEvery { mockRepository.registerAccountWithRecoveryPassword(any(), any(), any(), any(), any(), any()) } returns
       RequestResult.ApplicationError(RuntimeException("Unexpected"))

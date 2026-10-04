@@ -13,12 +13,12 @@ import org.signal.core.ui.permissions.Permissions;
 import org.signal.core.ui.util.StorageUtil;
 import org.signal.core.util.NoExternalStorageException;
 import org.signal.core.util.Stopwatch;
+import org.signal.core.util.UnableToStartException;
 import org.signal.core.util.crypto.AttachmentSecretProvider;
 import org.signal.core.util.logging.Log;
 import org.thoughtcrime.securesms.R;
 import org.thoughtcrime.securesms.backup.BackupEvent;
 import org.thoughtcrime.securesms.backup.BackupFileIOError;
-import org.thoughtcrime.securesms.backup.BackupPassphrase;
 import org.thoughtcrime.securesms.backup.BackupVerifier;
 import org.thoughtcrime.securesms.backup.FullBackupExporter;
 import org.thoughtcrime.securesms.crypto.AppAttachmentSecretStore;
@@ -26,6 +26,7 @@ import org.thoughtcrime.securesms.database.SignalDatabase;
 import org.thoughtcrime.securesms.dependencies.AppDependencies;
 import org.thoughtcrime.securesms.jobmanager.Job;
 import org.thoughtcrime.securesms.jobmanager.JobManager;
+import org.thoughtcrime.securesms.keyvalue.SignalStore;
 import org.thoughtcrime.securesms.notifications.NotificationChannels;
 import org.thoughtcrime.securesms.service.GenericForegroundService;
 import org.thoughtcrime.securesms.service.NotificationController;
@@ -117,13 +118,13 @@ public final class LocalBackupJob extends BaseJob {
     try (NotificationController notification = GenericForegroundService.startForegroundTask(context,
                                                                      context.getString(R.string.LocalBackupJob_creating_signal_backup),
                                                                      NotificationChannels.getInstance().BACKUPS,
-                                                                     R.drawable.ic_signal_backup))
+                                                                     org.signal.core.ui.R.drawable.ic_signal_backup))
     {
       updater.setNotification(notification);
       EventBus.getDefault().register(updater);
       notification.setIndeterminateProgress();
 
-      String backupPassword  = BackupPassphrase.get(context);
+      String backupPassword  = SignalStore.backup().getV1BackupPassphrase();
       File   backupDirectory = StorageUtil.getOrCreateBackupDirectory();
       String timestamp       = new SimpleDateFormat("yyyy-MM-dd-HH-mm-ss", Locale.US).format(new Date());
       String fileName        = String.format("signal-%s.backup", timestamp);
