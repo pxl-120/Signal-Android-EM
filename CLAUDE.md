@@ -51,10 +51,9 @@ signed-APK output dir:
 
 | Path | Contents |
 | --- | --- |
-| `build-and-sign.sh` | Build + zipalign + sign the website-flavor release APKs with your key. |
-| `gen-custom-emoji-json.sh` | Generate an `emoji.json` (+ `media/`) from a set of media files. |
-| `7tv-download-set.sh` | Download a 7TV emote set into a pack layout. |
-| `release/` | Signed-APK output — contents are **git-ignored** (`release/.gitignore`); the dir itself is kept. |
+| `build-and-sign.sh` | Build + zipalign + sign the website-flavor release APKs with your key (`[--no-build] [abi …]`). |
+| `publish-update.sh` | Publish a self-update: writes `release/update.json` from the signed APK (default `arm64-v8a`) and creates/updates the GitHub Release `v<versionName>` with the APK + manifest (`[--build] [--draft] [--abi …]`; needs an authenticated `gh`). |
+| `release/` | Signed-APK + `update.json` output — contents are **git-ignored** (`release/.gitignore`); the dir itself is kept. |
 
 ## Build & branding
 
@@ -64,8 +63,9 @@ The only build change is in `app/build.gradle.kts`, in the `website` product fla
 create("website") {
   dimension = "distribution"
   applicationIdSuffix = ".mod"                                     // -> org.thoughtcrime.securesms.mod
-  buildConfigField("boolean", "MANAGES_APP_UPDATES", "false")      // was true
-  buildConfigField("String", "APK_UPDATE_MANIFEST_URL", "null")    // was the real Signal updater URL
+  buildConfigField("boolean", "MANAGES_APP_UPDATES", "true")
+  buildConfigField("String", "APK_UPDATE_MANIFEST_URL",            // was updates.signal.org/android/latest.json
+    "\"https://github.com/pxl-120/Signal-Android-EM/releases/latest/download/update.json\"")
   buildConfigField("String", "BUILD_DISTRIBUTION_TYPE", "\"website\"")
 }
 ```
@@ -74,18 +74,31 @@ Consequences:
 
 - **`applicationIdSuffix = ".mod"`** gives the fork a distinct application id, so it installs
   **alongside** official Signal rather than refusing to install over it (different signing key).
-- **The in-app self-updater is disabled** (`MANAGES_APP_UPDATES = false`, manifest URL `null`) so the
-  fork won't try to pull and install official Signal release APKs over itself.
+- **The in-app self-updater is kept on but re-pointed at this fork's GitHub Releases** instead of
+  Signal's update server, so it never pulls official Signal APKs (which would fail anyway: different
+  key + app id). Upstream's `ApkUpdateJob` fetches `update.json` from the
+  `releases/latest/download/` URL and offers the APK when its `versionCode` is **higher** than the
+  installed one. `tools/publish-update.sh` generates that manifest and cuts the release. Consequences:
+  - Every published APK **must be signed with the same release key** (`~/signal-plus-release.jks`),
+    or Android refuses the update.
+  - `versionCode` comes from upstream (`canonicalVersionCode`), so a rebuild of the same upstream version
+    doesn't trigger an update. Ship fork-only changes by bumping it or by syncing a newer upstream.
+  - The release asset has a stable name (`Signal-Plus-<abi>.apk`, default `arm64-v8a`), so the
+    `latest/download` URLs always resolve to the newest release. Only that ABI self-updates.
 - Branding lives in **`app/src/website/res/`** (website-flavor resource overlay):
   - `values/strings.xml` → `app_name = "Signal+"`
   - `mipmap-*/ic_launcher.png` → custom launcher icon at all densities.
 
-Build a sideloadable universal APK from the modified repo (or just run `tools/build-and-sign.sh`):
+Build a sideloadable APK from the modified repo (or just run `tools/build-and-sign.sh`):
 
 ```bash
-./gradlew assembleWebsiteProdRelease         # output: app/build/outputs/apk/websiteProdRelease/
-# then sign with your own release key (apksigner) and verify
+./gradlew assembleWebsiteProdRelease         # output: app/build/outputs/apk/websiteProd/release/ (unsigned)
+tools/build-and-sign.sh --no-build arm64-v8a # zipalign + sign into tools/release/
+tools/publish-update.sh                      # cut the GitHub Release + update.json for self-update
 ```
+
+`build-and-sign.sh` prompts for the keystore passwords unless `SIGNALPLUS_STORE_PASS` /
+`SIGNALPLUS_KEY_PASS` are set.
 
 For Play-store style output use `bundlePlayProdRelease` (AAB) instead — but note the branding/flavor
 changes above are on the **website** flavor.
@@ -359,7 +372,7 @@ pack.zip
   on it or try to "restore" a default pack. With no imported pack, `getTokens` returns empty and there
   are simply zero custom emoji until a ZIP is imported (inline image URLs still work regardless).
 - **`build.gradle.kts` and `app/src/website/res/`** — the website-flavor build changes (`.mod` suffix,
-  updater off) and the branding overlay; see *Build & branding* above.
+  self-updater re-pointed at this fork's GitHub Releases) and the branding overlay; see *Build & branding* above.
 - `InlineMediaProvider.java` contains a leftover **unused private `applyInlineSpan(...)`** method (a
   vestige of the stage-1 design). Harmless; the live path is `attachInlineSpan(...)`.
 - **Privacy/network behavior of remote URLs:** remote media is fetched with a plain `HttpURLConnection`
@@ -375,7 +388,7 @@ pack.zip
 
 ```
 tools/                                       # build & helper scripts + release output (git-ignored APKs)
-app/build.gradle.kts                         # website flavor: .mod suffix, updater off
+app/build.gradle.kts                         # website flavor: .mod suffix, updater -> fork releases
 app/src/website/res/                         # "Signal+" name + launcher icon
 app/src/main/java/.../components/emoji/
   InlineMediaParser/Drawable/Span/Provider/
